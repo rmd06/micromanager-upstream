@@ -1,0 +1,254 @@
+// Script for manual acquisition
+// based on manualAcq.bsh, Nenad Amodaj, Feb 2008, Nico Stuurman, April 2008
+// Egor Zindy, Feb 2014
+
+import mmcorej.TaggedImage;
+import org.micromanager.api.SequenceSettings;
+import org.micromanager.api.MMTags;
+import org.micromanager.acquisition.TaggedImageStorageMultipageTiff;
+import org.micromanager.utils.ChannelSpec;
+import java.util.ArrayList;
+import ij.gui.NonBlockingGenericDialog;
+import ij.gui.WaitForUserDialog;
+import org.json.JSONObject;
+
+// ========================================
+// this is to run with ImageJ's BeanShellRunner.
+// Otherwise the 6 next lines are not needed.
+import org.micromanager.MMStudioMainFrame; 
+import mmcorej.CMMCore;
+import org.micromanager.acquisition.AcquisitionWrapperEngine;
+MMStudioMainFrame gui = MMStudioMainFrame.getInstance(); 
+CMMCore mmc = gui.getMMCore(); 
+AcquisitionWrapperEngine acq = gui.getAcquisitionEngine(); 
+// ========================================
+
+//A nice big font to display the current Channel.
+Font font = new Font("SansSerif", Font.BOLD, 24);
+
+//a method to create a new directory name.
+String[] newDirectory(String rootDirName, String prefixName) {
+	File f = new File(rootDirName, prefixName);
+	String name = prefixName;
+	int i = 1;
+
+	while(f.exists()) {
+		name = prefixName + i;
+		f = new File(rootDirName, name);
+		i = i+1;
+	}
+
+	String[] ret = {name, f.getPath()};
+	return ret;
+}
+
+//a method to create a new prefix
+String newPrefix(String prefixName, int increment) {
+	Long[] iArray = new Long[] {increment};
+	String name = prefixName + "_" + String.format("%04d", iArray);
+	return name;
+}
+
+// file locations
+acqName = "manual-acq-multi";
+rootDirName = acq.getRootName();
+prefixName = "image";
+SequenceSettings s = acq.getSequenceSettings();
+ArrayList channelList = new ArrayList();
+ArrayList imgList = new ArrayList();
+
+// clear previous acqName acquisition
+// This doesn't close the windows
+if (gui.acquisitionExists(acqName)) {
+	gui.closeAcquisition(acqName);
+}
+gui.clearMessageWindow();
+
+// parameters
+numFrames = 1;
+numSlices = 1;
+channelGroup = "Channel";
+numChannels = 0;
+
+//number of active channels
+for (int i=0; i<s.channels.size(); i++) {
+	ChannelSpec channel = s.channels.get(i);
+
+	if (!channel.useChannel)
+		continue;
+
+	channelList.add(channel);
+	numChannels += 1;
+}
+
+if (numChannels == 0)
+{
+	WaitForUserDialog dlg = new WaitForUserDialog("Manual Acquisition", "Check the Multi-D Acq. dialog\n\nNo active channels in use!"); 
+	dlg.show();
+	gui.closeAllAcquisitions();
+	return false;
+}
+
+gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices);
+
+for (int i=0;i<numChannels;i++) {
+	ChannelSpec channel = channelList.get(i);
+
+	gui.setChannelColor(acqName, i, channel.color);
+	gui.setChannelName(acqName, i, channel.config);
+}
+
+//Prior to 1.4.17? need this...
+//gui.initializeAcquisition(acqName, (int)mmc.getImageWidth(), (int)mmc.getImageHeight(), (int)mmc.getBytesPerPixel());
+
+String prefixCurrent;
+String rootCurrent;
+String[] ndArray;
+
+//check the prefixName. Change it if a directory already exists.
+ndArray = newDirectory(rootDirName, prefixName);
+prefixName = ndArray[0];
+fullDirName = ndArray[1];
+
+boolean isRunning = true;
+int i = 0; // prefix index
+int j = 0; // Channel counter. Best place to define it, as we need to set it to numChannels-1 if the directory cannot be created. Hence the reason why the channel loop isn't a for loop.
+
+while(isRunning) {
+	//create a working prefix for image i.
+	prefixCurrent = newPrefix(prefixName,i);
+	
+	File f;
+	while (j<numChannels) {
+		ChannelSpec channel = channelList.get(j);
+		currentExposure=channel.exposure;
+		gui.enableLiveMode(true);
+
+		NonBlockingGenericDialog dlg = new NonBlockingGenericDialog("Manual Acquisition ( "+prefixCurrent+" - "+(j+1)+"/"+numChannels+")");
+		dlg.addMessage("Set filters for " + channel.config + " ("+(j+1)+"/"+numChannels+")",font,channel.color);
+		m = dlg.getMessage();
+		m.setAlignment(1);
+		dlg.setCancelLabel("Stop!");
+		dlg.addNumericField("Exposure time (ms):", currentExposure, 0); 
+		dlg.addStringField("Image directory:", rootDirName, 30); 
+		dlg.addStringField("Image prefix:", prefixName, 30); 
+		dlg.showDialog();
+
+		if (dlg.wasCanceled()) {
+			isRunning = false;
+			break;
+		}
+
+		currentExposure = dlg.getNextNumber(); 
+
+		rootCurrent = dlg.getNextString();
+		prefixCurrent = dlg.getNextString();
+
+		//have we changed the prefix? have we changed the root directory?
+		if (!prefixName.equals(prefixCurrent) || !rootDirName.equals(rootCurrent)) {
+			//it's a new prefix or root. Reset the image counter.
+			i = 0;
+			if (!rootDirName.equals(rootCurrent)) {
+				rootDirName = rootCurrent;
+				acq.setRootName(rootDirName);
+			}
+			//check the prefixName. If alread exists, create a new one.
+			ndArray = newDirectory(rootDirName, prefixCurrent);
+			prefixName = ndArray[0];
+			fullDirName = ndArray[1];
+
+			//Let the user decide if they like the new prefix.
+			if (!prefixName.equals(prefixCurrent)) {
+				continue;
+			}
+		}
+
+		gui.enableLiveMode(false);
+		prefixCurrent = newPrefix(prefixName,i);
+		gui.message("Acquiring " + prefixCurrent + ", " + channel.config + " channel ("+currentExposure+"ms).");
+		mmc.setExposure(currentExposure);
+		mmc.setConfig(channelGroup, channel.config);
+		mmc.waitForConfig(channelGroup, channel.config);
+
+		mmc.snapImage();
+
+		//Create a tagged image and add the necessary tags
+		TaggedImage img = mmc.getTaggedImage();
+		img.tags.put(MMTags.Image.FRAME, 0);
+		img.tags.put(MMTags.Image.FRAME_INDEX, 0);
+		img.tags.put(MMTags.Image.SLICE, 0);
+		img.tags.put(MMTags.Image.SLICE_INDEX, 0);
+		img.tags.put(MMTags.Image.CHANNEL_INDEX, j);
+		img.tags.put(MMTags.Image.CHANNEL_NAME, channel.config);
+		img.tags.put(MMTags.Image.CHANNEL, channel.config);
+		gui.addImage(acqName, img);
+
+		//Empty list to begin with, need to be careful here.
+		if (j < imgList.size())
+			imgList.set(j,img);
+		else
+			imgList.add(img);
+
+		// set channel contrast based on the frame (frame 0, slice 0)
+		gui.setContrastBasedOnFrame(acqName, 0, 0);
+
+		//lets the user re-acquire the image until exposure is OK
+		if (currentExposure != channel.exposure) {
+			channel.exposure = currentExposure;
+			continue;
+		}
+
+		j = j+1;
+	}
+
+	//for now, don't save partial stacks.
+	if (!isRunning)
+		break;
+
+	//saving the image
+	mmAcq = gui.getAcquisition(acqName);
+
+	//adding the current prefix
+	JSONObject summary = mmAcq.getSummaryMetadata();
+	summary.put(MMTags.Summary.PREFIX, prefixCurrent);	
+
+	//checking that we can actually save in fullDirName
+	f = new File(fullDirName);
+	boolean error = false;
+	if (!f.exists()) {
+		try {
+			error = !f.mkdirs();
+		} catch ( e ) {
+			error = true;
+		}
+	} else if (f.exists() && !f.isDirectory()) {
+		error = true;
+	}
+
+	//directory creation failed or there is a file with that name, but isn't a directory
+	if (error) {
+		WaitForUserDialog dlg = new WaitForUserDialog("Manual Acquisition", "Cannot save!\nCheck your directory name / prefix combo"); 
+		dlg.show();
+		j = numChannels-1;
+		continue;
+	}
+
+	//Create a multi-tiff image and store the channel images.
+	TaggedImageStorageMultipageTiff storage = new TaggedImageStorageMultipageTiff(fullDirName,true,summary); 
+	for (j=0;j<numChannels;j++) {
+		TaggedImage img = imgList.get(j);
+		storage.putImage(img);
+	}
+	storage.finished();
+	storage.close();
+
+	//for the next image. Increment the image counter, reset the channel counter.
+	i = i+1;
+	j = 0;
+}
+
+//all done.
+gui.enableLiveMode(false);
+gui.closeAcquisition(acqName);
+
+// vim:tabstop=3:noexpandtab:shiftwidth=3:set syntax=java:
