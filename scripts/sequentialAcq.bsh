@@ -59,9 +59,6 @@ ArrayList imgList = new ArrayList();
 
 // clear previous acqName acquisition
 // This doesn't close the windows
-if (gui.acquisitionExists(acqName)) {
-	gui.closeAcquisition(acqName);
-}
 gui.clearMessageWindow();
 
 // parameters
@@ -88,18 +85,6 @@ if (numChannels == 0)
 	gui.closeAllAcquisitions();
 	return false;
 }
-
-gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices);
-
-for (int i=0;i<numChannels;i++) {
-	ChannelSpec channel = channelList.get(i);
-
-	gui.setChannelColor(acqName, i, channel.color);
-	gui.setChannelName(acqName, i, channel.config);
-}
-
-//Prior to 1.4.17? need this...
-//gui.initializeAcquisition(acqName, (int)mmc.getImageWidth(), (int)mmc.getImageHeight(), (int)mmc.getBytesPerPixel());
 
 String prefixCurrent;
 String rootCurrent;
@@ -181,6 +166,24 @@ while(isRunning) {
 		img.tags.put(MMTags.Image.CHANNEL_INDEX, j);
 		img.tags.put(MMTags.Image.CHANNEL_NAME, channel.config);
 		img.tags.put(MMTags.Image.CHANNEL, channel.config);
+
+		//check that we have an acquisition window. If not, create it.
+		if (!gui.acquisitionExists(acqName)) {
+			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices);
+			try {
+				//need to check the syntax on this one... string + 3 ints or string + 4 ints?
+				gui.initializeAcquisition(acqName, (int)mmc.getImageWidth(), (int)mmc.getImageHeight(), (int)mmc.getBytesPerPixel(), 0);
+			} catch ( e ) {
+				gui.message("Acquisition will initialize later...");
+			}
+
+			for (int k=0;k<numChannels;k++) {
+				ChannelSpec channel = channelList.get(k);
+
+				gui.setChannelColor(acqName, k, channel.color);
+				gui.setChannelName(acqName, k, channel.config);
+			}
+		}
 		gui.addImage(acqName, img);
 
 		//Empty list to begin with, need to be careful here.
@@ -249,6 +252,5 @@ while(isRunning) {
 
 //all done.
 gui.enableLiveMode(false);
-gui.closeAcquisition(acqName);
 
 // vim:tabstop=3:noexpandtab:shiftwidth=3:set syntax=java:
