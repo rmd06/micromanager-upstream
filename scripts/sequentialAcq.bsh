@@ -5,9 +5,12 @@
 import mmcorej.TaggedImage;
 import org.micromanager.api.SequenceSettings;
 import org.micromanager.api.MMTags;
-import org.micromanager.acquisition.TaggedImageStorageMultipageTiff;
+import org.micromanager.api.ImageCache;
 import org.micromanager.utils.ChannelSpec;
+import org.micromanager.utils.ImageUtils;
+import org.micromanager.acquisition.TaggedImageStorageMultipageTiff;
 import java.util.ArrayList;
+import ij.process.ImageProcessor;
 import ij.gui.NonBlockingGenericDialog;
 import ij.gui.WaitForUserDialog;
 import org.json.JSONObject;
@@ -82,7 +85,6 @@ if (numChannels == 0)
 {
 	WaitForUserDialog dlg = new WaitForUserDialog("Manual Acquisition", "Check the Multi-D Acq. dialog\n\nNo active channels in use!"); 
 	dlg.show();
-	gui.closeAllAcquisitions();
 	return false;
 }
 
@@ -99,11 +101,19 @@ boolean isRunning = true;
 int i = 0; // prefix index
 int j = 0; // Channel counter. Best place to define it, as we need to set it to numChannels-1 if the directory cannot be created. Hence the reason why the channel loop isn't a for loop.
 
+//this allows to close the window without prompting to save
+if (gui.acquisitionExists(acqName)) {
+	gui.getAcquisition(acqName).promptToSave(false);
+	gui.closeAcquisitionWindow(acqName);
+}
+
+//image loop
 while(isRunning) {
 	//create a working prefix for image i.
 	prefixCurrent = newPrefix(prefixName,i);
-	
 	File f;
+
+	//channel loop
 	while (j<numChannels) {
 		ChannelSpec channel = channelList.get(j);
 		currentExposure=channel.exposure;
@@ -154,7 +164,6 @@ while(isRunning) {
 		mmc.setExposure(currentExposure);
 		mmc.setConfig(channelGroup, channel.config);
 		mmc.waitForConfig(channelGroup, channel.config);
-
 		mmc.snapImage();
 
 		//Create a tagged image and add the necessary tags
@@ -169,7 +178,7 @@ while(isRunning) {
 
 		//check that we have an acquisition window. If not, create it.
 		if (!gui.acquisitionExists(acqName)) {
-			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices);
+			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices, true, false);
 			try {
 				//need to check the syntax on this one... string + 3 ints or string + 4 ints?
 				gui.initializeAcquisition(acqName, (int)mmc.getImageWidth(), (int)mmc.getImageHeight(), (int)mmc.getBytesPerPixel(), 0);
@@ -179,7 +188,6 @@ while(isRunning) {
 
 			for (int k=0;k<numChannels;k++) {
 				ChannelSpec channel = channelList.get(k);
-
 				gui.setChannelColor(acqName, k, channel.color);
 				gui.setChannelName(acqName, k, channel.config);
 			}
@@ -187,8 +195,18 @@ while(isRunning) {
 		gui.addImage(acqName, img);
 
 		//Empty list to begin with, need to be careful here.
-		if (j < imgList.size())
+		int imgListSize = imgList.size();
+		if (j < imgListSize) {
 			imgList.set(j,img);
+
+			//this is where we blank all the other images.
+			if (j ==0) {
+				for (int k=1;k<imgListSize;k++) {
+					ImageProcessor ip = ImageUtils.makeProcessor(imgList.get(k));
+					ip.set(0);
+				}
+			}
+		}
 		else
 			imgList.add(img);
 
@@ -244,6 +262,10 @@ while(isRunning) {
 	}
 	storage.finished();
 	storage.close();
+
+	//saved! No need to prompt when closing the acqName window.
+	//putting this here rather than in the channel loop prompt the user to save an incomplete image before closing (one last chance!)
+	mmAcq.promptToSave(false);
 
 	//for the next image. Increment the image counter, reset the channel counter.
 	i = i+1;
