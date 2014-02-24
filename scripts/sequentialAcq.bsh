@@ -117,6 +117,7 @@ while(isRunning) {
 	while (j<numChannels) {
 		ChannelSpec channel = channelList.get(j);
 		currentExposure=channel.exposure;
+		mmc.setExposure(currentExposure);
 		gui.enableLiveMode(true);
 
 		NonBlockingGenericDialog dlg = new NonBlockingGenericDialog("Manual Acquisition ( "+prefixCurrent+" - "+(j+1)+"/"+numChannels+")");
