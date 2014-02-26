@@ -5,7 +5,6 @@
 import mmcorej.TaggedImage;
 import org.micromanager.api.SequenceSettings;
 import org.micromanager.api.MMTags;
-import org.micromanager.api.ImageCache;
 import org.micromanager.utils.ChannelSpec;
 import org.micromanager.utils.ImageUtils;
 import org.micromanager.acquisition.TaggedImageStorageMultipageTiff;
@@ -14,6 +13,7 @@ import ij.process.ImageProcessor;
 import ij.gui.NonBlockingGenericDialog;
 import ij.gui.WaitForUserDialog;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 // ========================================
 // this is to run with ImageJ's BeanShellRunner.
@@ -101,6 +101,10 @@ boolean isRunning = true;
 int i = 0; // prefix index
 int j = 0; // Channel counter. Best place to define it, as we need to set it to numChannels-1 if the directory cannot be created. Hence the reason why the channel loop isn't a for loop.
 
+int currentImageWidth = (int)mmc.getImageWidth();
+int currentImageHeight = (int)mmc.getImageHeight();
+int currentBytesPerPixel = (int)mmc.getBytesPerPixel();
+
 //this allows to close the window without prompting to save
 if (gui.acquisitionExists(acqName)) {
 	gui.getAcquisition(acqName).promptToSave(false);
@@ -117,7 +121,6 @@ while(isRunning) {
 	while (j<numChannels) {
 		ChannelSpec channel = channelList.get(j);
 		currentExposure=channel.exposure;
-		mmc.setExposure(currentExposure);
 		gui.enableLiveMode(true);
 
 		NonBlockingGenericDialog dlg = new NonBlockingGenericDialog("Manual Acquisition ( "+prefixCurrent+" - "+(j+1)+"/"+numChannels+")");
@@ -159,7 +162,32 @@ while(isRunning) {
 			}
 		}
 
+		//check that the acquisition settings are current. If not, close the acquisition window and reset the image prefix / counter.
+		if (gui.acquisitionExists(acqName)) {
+			mmAcq = gui.getAcquisition(acqName);
+			currentImageWidth = (int)mmc.getImageWidth();
+			currentImageHeight = (int)mmc.getImageHeight();
+			currentBytesPerPixel = (int)mmc.getBytesPerPixel();
+			if ((mmAcq.getWidth() != currentImageWidth)
+					|| (mmAcq.getHeight() != currentImageHeight)
+					|| (mmAcq.getByteDepth() != currentBytesPerPixel)) {
+
+				gui.getAcquisition(acqName).promptToSave(false);
+				gui.closeAcquisitionWindow(acqName);
+
+				//reset the image and channel counters
+				i = 0;
+				j = 0;
+
+				//new prefix
+				ndArray = newDirectory(rootDirName, prefixCurrent);
+				prefixName = ndArray[0];
+				fullDirName = ndArray[1];
+				continue;
+			}
+		} 
 		gui.enableLiveMode(false);
+
 		prefixCurrent = newPrefix(prefixName,i);
 		gui.message("Acquiring " + prefixCurrent + ", " + channel.config + " channel ("+currentExposure+"ms).");
 		mmc.setExposure(currentExposure);
@@ -179,7 +207,7 @@ while(isRunning) {
 
 		//check that we have an acquisition window. If not, create it.
 		if (!gui.acquisitionExists(acqName)) {
-			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices, true, false);
+			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices);
 			try {
 				//need to check the syntax on this one... string + 3 ints or string + 4 ints?
 				gui.initializeAcquisition(acqName, (int)mmc.getImageWidth(), (int)mmc.getImageHeight(), (int)mmc.getBytesPerPixel(), 0);
@@ -230,7 +258,9 @@ while(isRunning) {
 	//saving the image
 	mmAcq = gui.getAcquisition(acqName);
 
-	//adding the current prefix
+	//Building a summary for the image stack
+	JSONArray chMins = new JSONArray();
+	JSONArray chMaxs = new JSONArray();
 	JSONObject summary = mmAcq.getSummaryMetadata();
 	summary.put(MMTags.Summary.PREFIX, prefixCurrent);	
 
@@ -259,8 +289,18 @@ while(isRunning) {
 	TaggedImageStorageMultipageTiff storage = new TaggedImageStorageMultipageTiff(fullDirName,true,summary); 
 	for (j=0;j<numChannels;j++) {
 		TaggedImage img = imgList.get(j);
+		//min and max of the image using an imageprocessor
+		ImageProcessor ip = ImageUtils.makeProcessor(img);
+		ip.resetMinAndMax();
+		chMins.put(ip.minValue());
+		chMaxs.put(ip.maxValue());
+
 		storage.putImage(img);
 	}
+
+	summary.put(MMTags.Summary.CHANNEL_MINS, chMins);
+	summary.put(MMTags.Summary.CHANNEL_MAXES, chMaxs);
+
 	storage.finished();
 	storage.close();
 
