@@ -121,6 +121,7 @@ while(isRunning) {
 	while (j<numChannels) {
 		ChannelSpec channel = channelList.get(j);
 		currentExposure=channel.exposure;
+		mmc.setExposure(currentExposure);
 		gui.enableLiveMode(true);
 
 		NonBlockingGenericDialog dlg = new NonBlockingGenericDialog("Manual Acquisition ( "+prefixCurrent+" - "+(j+1)+"/"+numChannels+")");
@@ -207,7 +208,7 @@ while(isRunning) {
 
 		//check that we have an acquisition window. If not, create it.
 		if (!gui.acquisitionExists(acqName)) {
-			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices);
+			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices, true, false);
 			try {
 				//need to check the syntax on this one... string + 3 ints or string + 4 ints?
 				gui.initializeAcquisition(acqName, (int)mmc.getImageWidth(), (int)mmc.getImageHeight(), (int)mmc.getBytesPerPixel(), 0);
