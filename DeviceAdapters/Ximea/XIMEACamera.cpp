@@ -6,7 +6,7 @@
 // DESCRIPTION:   XIMEA camera module.
 //                
 // AUTHOR:        Marian Zajko, <marian.zajko@ximea.com>
-// COPYRIGHT:     Marian Zajko and XIMEA GmbH, Münster, 2011
+// COPYRIGHT:     Marian Zajko and XIMEA GmbH, Mï¿½nster, 2011
 //
 // LICENSE:       This file is distributed under the BSD license.
 //                License text is included with the source distribution.
@@ -296,7 +296,8 @@ int XIMEACamera::Initialize()
 	for(int i = 1; i <= maxBin; i++){
 		if(xiSetParamInt(handle, XI_PRM_DOWNSAMPLING, i) == XI_OK){
 			char buf[16];
-			itoa( i, buf, 10);
+			//itoa( i, buf, 10);
+			sprintf( buf, "%d", i);
 			binningValues.push_back(buf);
 		}
 	}
@@ -789,7 +790,8 @@ unsigned XIMEACamera::GetImageBytesPerPixel() const
 */
 unsigned XIMEACamera::GetBitDepth() const
 {
-	return img_->Depth();
+	//return img_->Depth();
+	return adc_;
 }
 
 /***********************************************************************
