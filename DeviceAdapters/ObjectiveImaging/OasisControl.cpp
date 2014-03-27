@@ -87,8 +87,8 @@ MODULE_API void InitializeModuleData()
 
    }
 
-   AddAvailableDeviceName(g_XYStageDeviceName, "Oasis XY stage");
-   //AddAvailableDeviceName(g_ZStageDeviceName,"Oasis Z or single axis stage");
+   RegisterDevice(g_XYStageDeviceName, MM::XYStageDevice, "Oasis XY stage");
+   //RegisterDevice(g_ZStageDeviceName, MM::StageDevice, "Oasis Z or single axis stage");
 }
 
 MODULE_API MM::Device* CreateDevice(const char* deviceName)
@@ -220,8 +220,8 @@ int OasisXYStage::Initialize()
    if (!(lpXStatus & S_INITIALIZED) || !(lpYStatus & S_INITIALIZED))
    {
       nRet = MessageBox(HWND_DESKTOP,       
-         "Please ensure that the microscope objectives and condensor are well clear of the\nstage and that nothing will obstruct the stage over the full range of its travel.",
-         "The Oasis stage must be initialised", 
+         L"Please ensure that the microscope objectives and condensor are well clear of the\nstage and that nothing will obstruct the stage over the full range of its travel.",
+         L"The Oasis stage must be initialised", 
          MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL | MB_SETFOREGROUND); 
      
       OI_InitializeXY();
