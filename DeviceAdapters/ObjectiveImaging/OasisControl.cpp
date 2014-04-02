@@ -213,19 +213,25 @@ int OasisXYStage::Initialize()
       return nRet;
    
    //Initializing the board;
+   /*
    unsigned short lpXStatus, lpYStatus;
    OI_SelectCard(BoardID);
    OI_ReadStatusXY(&lpXStatus, &lpYStatus);
 
-   if (!(lpXStatus & S_INITIALIZED) || !(lpYStatus & S_INITIALIZED))
+   LogInit();
+   tmpMessage << "OI_ReadStatusXY() - lpXStatus=" << lpXStatus << ", lpYStatus=" << lpYStatus;
+   LogIt();
+
+   if ((lpXStatus & S_INITIALIZED)==0 || (lpYStatus & S_INITIALIZED)==0)
    {
       nRet = MessageBox(HWND_DESKTOP,       
-         L"Please ensure that the microscope objectives and condensor are well clear of the\nstage and that nothing will obstruct the stage over the full range of its travel.",
+         L"Please ensure that the microscope objectives and condensor are well clear of the stage and that nothing will obstruct the stage over the full range of its travel.",
          L"The Oasis stage must be initialised", 
          MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL | MB_SETFOREGROUND); 
      
       OI_InitializeXY();
    }
+   */
 
    initialized_ = true;
   
@@ -266,10 +272,17 @@ int OasisXYStage::SetPositionSteps(long x, long y)
 
 int OasisXYStage::Home()
 {
-   double xMin = lowerLimitX_um_;
-   double yMin = lowerLimitY_um_;
+   double xMin, yMin, xMax, yMax;
 
-   return SetPositionUm(xMin,yMin);
+   //Selecting the right Oasis board
+   OI_SelectCard(BoardID);
+
+   //This will home the Oasis stage
+   OI_InitializeXY();
+
+   //Centering the stage
+   GetLimitsUm(xMin, xMax, yMin, yMax);
+   return SetPositionUm((xMin+xMax)/2.,(yMin+yMax)/2.);
 }
 
 int OasisXYStage::SetOrigin()
