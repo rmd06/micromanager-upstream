@@ -27,7 +27,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.FocusEvent;
@@ -37,7 +36,6 @@ import java.awt.event.MouseListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
-import java.util.Vector;
 import java.util.prefs.Preferences;
 
 import javax.swing.AbstractCellEditor;
@@ -61,6 +59,7 @@ import org.micromanager.utils.GUIColors;
 import org.micromanager.utils.MMDialog;
 
 import com.swtdesigner.SwingResourceManager;
+import java.util.ArrayList;
 
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -77,6 +76,8 @@ import org.micromanager.utils.MMException;
 import org.micromanager.utils.ReportingUtils;
 
 
+enum AxisType {oneD, twoD};
+
 public class PositionListDlg extends MMDialog implements MouseListener, ChangeListener {
    private static final long serialVersionUID = 1L;
    private String posListDir_;
@@ -90,14 +91,15 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
 
    private JTable posTable_;
    private JTable axisTable_;
+   private AxisTableModel axisModel_;
    private SpringLayout springLayout;
    private CMMCore core_;
    private ScriptInterface gui_;
    private MMOptions opts_;
    private Preferences prefs_;
-   private TileCreatorDlg tileCreatorDlg_;
    private GUIColors guiColors_;
    private AxisList axisList_;
+   private final JButton tileButton_;
 
    private MultiStagePosition curMsp_;
    public JButton markButtonRef;
@@ -181,15 +183,21 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
    }
 
    private class AxisData {
-      public AxisData(boolean use, String axisName) {
+      private boolean use_;
+      private String axisName_;
+      private AxisType type_;
+      
+      public AxisData(boolean use, String axisName, AxisType type) {
          use_ = use;
          axisName_ = axisName;
+         type_ = type;
       }
       public boolean getUse() {return use_;}
       public String getAxisName() {return axisName_;}
+      public AxisType getType() {return type_;}
+      
       public void setUse(boolean use) {use_ = use;}
-      private boolean use_;
-      private String axisName_;
+
    }
 
    /**
@@ -197,19 +205,22 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
     * of this class
     */
    private class AxisList {
-      private Vector<AxisData> axisList_ = new Vector<AxisData>();
+      private ArrayList<AxisData> axisList_ = new ArrayList<AxisData>();
+      
       public AxisList() {
          // Initialize the axisList.
          try {
             // add 1D stages
             StrVector stages = core_.getLoadedDevicesOfType(DeviceType.StageDevice);
             for (int i=0; i<stages.size(); i++) {
-               axisList_.add(new AxisData(prefs_.getBoolean(stages.get(i),true), stages.get(i)));
+               axisList_.add(new AxisData(prefs_.getBoolean(stages.get(i),true), 
+                       stages.get(i), AxisType.oneD));
             }
             // read 2-axis stages
             StrVector stages2D = core_.getLoadedDevicesOfType(DeviceType.XYStageDevice);
             for (int i=0; i<stages2D.size(); i++) {
-               axisList_.add(new AxisData(prefs_.getBoolean(stages2D.get(i),true), stages2D.get(i)));
+               axisList_.add(new AxisData(prefs_.getBoolean(stages2D.get(i),true), 
+                       stages2D.get(i), AxisType.twoD));
             }
          } catch (Exception e) {
             handleError(e);
@@ -241,6 +252,7 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
     */
    private class AxisTableModel extends AbstractTableModel {
       private static final long serialVersionUID = 1L;
+      private boolean isEditable_ = true;
       public final String[] COLUMN_NAMES = new String[] {
             "Use",
             "Axis"
@@ -274,10 +286,18 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       public Class<?> getColumnClass(int c) {
          return getValueAt(0, c).getClass();
       }
+      public void setEditable(boolean state) {
+         isEditable_ = state;
+         if (state) {
+            for (int i=0; i < getRowCount(); i++) {
+               
+            }
+         }
+      }
       @Override
       public boolean isCellEditable(int rowIndex, int columnIndex) {
          if (columnIndex == 0) {
-            return true;
+            return isEditable_;
          }
          return false;
       }
@@ -285,13 +305,36 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       public void setValueAt(Object value, int rowIndex, int columnIndex) {
          if (columnIndex == 0) {
             axisList_.get(rowIndex).setUse( (Boolean) value);
-            prefs_.putBoolean(axisList_.get(rowIndex).getAxisName(), (Boolean) value);
+            prefs_.putBoolean(axisList_.get(rowIndex).getAxisName(), (Boolean) value); 
+            updateTileButton();
          }
          fireTableCellUpdated(rowIndex, columnIndex);
          axisTable_.clearSelection();
       }
    }
 
+   private void updateTileButton() {
+      int n2DStages = 0;
+      int n1DStages = 0;
+      for (int i = 0; i < axisList_.getNumberOfPositions(); i++) {
+         AxisData ad = axisList_.get(i);
+         if (ad.getUse()) {
+            if (ad.getType() == AxisType.oneD) {
+               n1DStages++;
+            }
+            if (ad.getType() == AxisType.twoD) {
+               n2DStages++;
+            }
+         }
+      }
+      if ( n2DStages == 1 && n1DStages == 1) {
+         tileButton_.setEnabled(true);
+      } else {
+         tileButton_.setEnabled(false);
+      }
+      
+   }
+   
    /**
     * Renders the first row of the position list table
     */
@@ -342,11 +385,8 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       prefs_ = root.node(root.absolutePath() + "/XYPositionListDlg");
       setPrefsNode(prefs_);
 
-      Rectangle r = getBounds();
-      GUIUtils.recallPosition(this);
-
-      setBackground(gui_.getBackgroundColor());
-      gui_.addMMBackgroundListener(this);
+      // Rectangle r = getBounds();
+          
 
       Font arialSmallFont = new Font("Arial", Font.PLAIN, 10);
       
@@ -373,20 +413,17 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       model.setData(posList);
       posTable_.setModel(model);
       CellEditor cellEditor_ = new CellEditor();
+      cellEditor_.addListener();
       posTable_.setDefaultEditor(Object.class, cellEditor_);
       posTable_.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
       scrollPane.setViewportView(posTable_);
-      posTable_.addMouseListener(this);
-
-      
 
       axisTable_ = new JTable();
       axisTable_.setFont(new Font("Arial", Font.PLAIN, 10));
       axisList_ = new AxisList();
-      AxisTableModel axisModel = new AxisTableModel();
-      axisTable_.setModel(axisModel);
+      axisModel_ = new AxisTableModel();
+      axisTable_.setModel(axisModel_);
       axisPane.setViewportView(axisTable_);
-      axisTable_.addMouseListener(this);
 
       int axisPaneLineOffset = 26;
       if (JavaUtils.isMac()) {
@@ -399,7 +436,7 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       springLayout.putConstraint(SpringLayout.NORTH, scrollPane, 10, 
               SpringLayout.NORTH, getContentPane());
       springLayout.putConstraint(SpringLayout.NORTH, axisPane, 
-              -(axisPaneLineOffset + axisPaneLineOffset*axisModel.getRowCount()), SpringLayout.SOUTH, getContentPane());
+              -(axisPaneLineOffset + axisPaneLineOffset*axisModel_.getRowCount()), SpringLayout.SOUTH, getContentPane());
 
       // mark / replace button:
       JButton markButton = new JButton();
@@ -579,10 +616,6 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       springLayout.putConstraint(SpringLayout.WEST, setOriginButton, 0, SpringLayout.WEST, markButton);
 
 
-
-
-
-
       final JButton removeAllButton = new JButton();
       removeAllButton.setFont(new Font("Arial", Font.PLAIN, 10));
       removeAllButton.addActionListener(new ActionListener() {
@@ -621,22 +654,23 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       springLayout.putConstraint(SpringLayout.EAST, closeButton, 0, SpringLayout.EAST, markButton);
       springLayout.putConstraint(SpringLayout.WEST, closeButton, 0, SpringLayout.WEST, markButton);
 
-      final JButton tileButton = new JButton();
-      tileButton.setFont(new Font("Arial", Font.PLAIN, 10));
-      tileButton.addActionListener(new ActionListener() {
+      tileButton_ = new JButton();
+      tileButton_.setFont(new Font("Arial", Font.PLAIN, 10));
+      tileButton_.addActionListener(new ActionListener() {
          @Override
          public void actionPerformed(ActionEvent arg0) {
             showCreateTileDlg();
          }
       });
-      tileButton.setIcon(SwingResourceManager.getIcon(PositionListDlg.class, "icons/empty.png"));
-      tileButton.setText("Create Grid");
-      tileButton.setToolTipText("Open new window to create grid of equally spaced positions");
-      getContentPane().add(tileButton);
-      springLayout.putConstraint(SpringLayout.SOUTH, tileButton, -1, SpringLayout.NORTH, closeButton);
-      springLayout.putConstraint(SpringLayout.NORTH, tileButton, -27, SpringLayout.NORTH, closeButton);
-      springLayout.putConstraint(SpringLayout.EAST, tileButton, 0, SpringLayout.EAST, markButton);
-      springLayout.putConstraint(SpringLayout.WEST, tileButton, 0, SpringLayout.WEST, markButton);
+      tileButton_.setIcon(SwingResourceManager.getIcon(PositionListDlg.class, "icons/empty.png"));
+      tileButton_.setText("Create Grid");
+      tileButton_.setToolTipText("Open new window to create grid of equally spaced positions");
+      getContentPane().add(tileButton_);
+      springLayout.putConstraint(SpringLayout.SOUTH, tileButton_, -1, SpringLayout.NORTH, closeButton);
+      springLayout.putConstraint(SpringLayout.NORTH, tileButton_, -27, SpringLayout.NORTH, closeButton);
+      springLayout.putConstraint(SpringLayout.EAST, tileButton_, 0, SpringLayout.EAST, markButton);
+      springLayout.putConstraint(SpringLayout.WEST, tileButton_, 0, SpringLayout.WEST, markButton);
+      updateTileButton();
 
       final JButton saveAsButton = new JButton();
       saveAsButton.setFont(new Font("Arial", Font.PLAIN, 10));
@@ -671,8 +705,13 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       springLayout.putConstraint(SpringLayout.NORTH, loadButton, -83, SpringLayout.NORTH, closeButton);
       springLayout.putConstraint(SpringLayout.EAST, loadButton, 0, SpringLayout.EAST, markButton);
       springLayout.putConstraint(SpringLayout.WEST, loadButton, 0, SpringLayout.WEST, markButton);
-
-      getPositionList().addChangeListener(this);
+      
+   }
+   
+   public void addListeners() {   
+      axisTable_.addMouseListener(this);
+      posTable_.addMouseListener(this);      
+      getPositionList().addChangeListener(this);    
    }
    
    
@@ -702,7 +741,6 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
 
    }
    
-
 
    public void addPosition(MultiStagePosition msp, String label) {
       PosTableModel ptm = (PosTableModel)posTable_.getModel();
@@ -771,6 +809,11 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
       axm.fireTableDataChanged();
    }
 
+   public void activateAxisTable(boolean state) {
+      axisModel_.setEditable(state);
+      axisTable_.setEnabled(state);
+   }
+   
    public void setPositionList(PositionList pl) {
       PosTableModel ptm = (PosTableModel)posTable_.getModel();
       ptm.setData(pl);
@@ -910,14 +953,18 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
    /**
     * Editor component for the position list table
     */
-   public class CellEditor extends AbstractCellEditor implements TableCellEditor, FocusListener {
+   public class CellEditor extends AbstractCellEditor implements TableCellEditor, 
+           FocusListener {
       private static final long serialVersionUID = 3L;
       // This is the component that will handle editing of the cell's value
       JTextField text_ = new JTextField();
       int editingCol_;
 
       public CellEditor() {
-         super();
+         super();       
+      }
+      
+      public void addListener() {
          text_.addFocusListener(this);
       }
 
@@ -1013,15 +1060,44 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
    public boolean useDrive(String drive) {
       return axisList_.use(drive);
    }
+   
+   /**
+    * Returns the first selected drive of the specified type
+    * @param type
+    * @return 
+    */
+   private String getAxis(AxisType type) {
+      for (int i = 0; i < axisList_.getNumberOfPositions(); i++) {
+         AxisData axis = axisList_.get(i);
+         if (axis.getUse() && axis.getType() == type) {
+            return axis.getAxisName();
+         }
+      }
+      return null;
+   }
+   
+   /**
+    * Returns the first selected XYDrive or null when none is selected
+    * @return 
+    */
+   public String get2DAxis() {
+      return getAxis(AxisType.twoD);
+   }
+   
+    /**
+    * Returns the first selected Drive or null when none is selected
+    * @return 
+    */
+   public String get1DAxis() {
+      return getAxis(AxisType.oneD);
+   }
 
    protected void showCreateTileDlg() {
-      if (tileCreatorDlg_ == null) {
-         tileCreatorDlg_ = new TileCreatorDlg(core_, opts_, this);
-         gui_.addMMBackgroundListener(tileCreatorDlg_);
-         gui_.addMMListener(tileCreatorDlg_);
-      }
-      tileCreatorDlg_.setBackground(guiColors_.background.get(opts_.displayBackground_));
-      tileCreatorDlg_.setVisible(true);
+      TileCreatorDlg tileCreatorDlg = new TileCreatorDlg(core_, opts_, this);
+      gui_.addMMBackgroundListener(tileCreatorDlg);
+      gui_.addMMListener(tileCreatorDlg);
+      tileCreatorDlg.setBackground(guiColors_.background.get(opts_.displayBackground_));
+      tileCreatorDlg.setVisible(true);
    }
 
 
@@ -1145,7 +1221,6 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
                }
 
                sct.interrupt();
-               sct=null;
 
                //calibrate_(deviceName, x1, y1);
 
@@ -1175,10 +1250,10 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
                bt.start();
 
                core_.setXYPosition(deviceName, x1[0]-x2[0], y1[0]-y2[0]);               
-
-               busy = core_.deviceBusy(deviceName);
-
-               if (isInterrupted())return;
+               
+               if (isInterrupted())
+                  return;
+               
                busy = core_.deviceBusy(deviceName);
                while (busy){
                   if (isInterrupted())return;
@@ -1188,7 +1263,6 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
                }
 
                bt.interrupt();
-               bt=null;
 
             }           
          } catch (InterruptedException e) { ReportingUtils.logError(e);}
@@ -1248,7 +1322,6 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
             bt.start();
 
             core_.setXYPosition(deviceName, x1[0] - x2[0], y1[0] - y2[0]);
-            busy = core_.deviceBusy(deviceName);
 
             if (isInterrupted()) {
                return;
@@ -1266,7 +1339,6 @@ public class PositionListDlg extends MMDialog implements MouseListener, ChangeLi
             }
 
             bt.interrupt();
-            bt = null;
 
          } catch (InterruptedException e) {
             ReportingUtils.logError(e);

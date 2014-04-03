@@ -2227,6 +2227,18 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
          toggleShutterButton_.setText("Open");
       }
    }
+   
+   
+   private void checkPosListDlg() {
+      if (posListDlg_ == null) {
+         posListDlg_ = new PositionListDlg(core_, this, posList_, options_);
+         GUIUtils.recallPosition(posListDlg_);
+         posListDlg_.setBackground(gui_.getBackgroundColor());
+         gui_.addMMBackgroundListener(posListDlg_);
+         posListDlg_.addListeners();
+      }
+   }
+   
 
    // //////////////////////////////////////////////////////////////////////////
    // public interface available for scripting access
@@ -2308,13 +2320,13 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
       return acqControlWin_;
    }
 
+   
    /**
     * Implements ScriptInterface
     */
    @Override
    public PositionListDlg getXYPosListDlg() {
-      if (posListDlg_ == null)
-         posListDlg_ = new PositionListDlg(core_, this, posList_, options_);
+      checkPosListDlg();
       return posListDlg_;
    }
 
@@ -3325,9 +3337,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
     */
    @Override
    public void showXYPositionList() {
-      if (posListDlg_ == null) {
-         posListDlg_ = new PositionListDlg(core_, this, posList_, options_);
-      }
+      checkPosListDlg();
       posListDlg_.setVisible(true);
    }
 
@@ -4291,6 +4301,16 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
 		   return new SequenceSettings();
 	   return engine_.getSequenceSettings();
    }
+   
+   @Override
+   public void setAcqusitionSettings(SequenceSettings ss) {
+      if (engine_ == null)
+         return;
+      
+      engine_.setSequenceSettings(ss);
+      acqControlWin_.updateGUIContents();
+   }
+
    
    @Override
    public String getAcquisitionPath() {

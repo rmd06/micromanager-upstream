@@ -21,7 +21,12 @@ AUTOMAKE_OPTIONS = foreign subdir-objects
 AM_CXXFLAGS = $(BOOST_CPPFLAGS) -fno-strict-aliasing
 AM_CPPFLAGS = $(JAVAINC)
 
-SWIGLIB_SOURCES = MMCoreJ.i \
+# This ugly list of headers is necessary to trigger the rebuild of the
+# SWIG-generated source when a header is modified. The issue cannot be fixed
+# here; it is a result of poor implementation hiding in the MMCore headers.
+# Unfortunately this list needs to be repeated in MMCorePy_wrap/Makefile.am, so
+# don't forget to update that file.
+swig_sources = MMCoreJ.i \
 	../MMCore/CircularBuffer.h  \
 	../MMCore/ConfigGroup.h  \
 	../MMCore/Configuration.h \
@@ -40,26 +45,26 @@ SWIGLIB_SOURCES = MMCoreJ.i \
 
 # DEVICEADAPTERPATH is poorly named: it actually means "where to put all MM
 # libraries, including device adapters".
-MMCoreJ_wrap.cxx: $(SWIGLIB_SOURCES)
+MMCoreJ_wrap.cxx: $(swig_sources)
 	test -d mmcorej || mkdir mmcorej
 	touch $(srcdir)/MMCoreJ_wrap.cxx || (chmod +wrx $(srcdir) && touch $(srcdir)/MMCoreJ_wrap.cxx)
 	$(SWIG) -c++ -java -package mmcorej -outdir mmcorej -module MMCoreJ \
 		"-DMMCOREJ_LIBRARY_PATH=\"$(DEVICEADAPTERPATH)\"" \
-		-o $(srcdir)/MMCoreJ_wrap.cxx $(srcdir)/MMCoreJ.i 
+		-o $(srcdir)/MMCoreJ_wrap.cxx $(srcdir)/MMCoreJ.i
 	cp $(srcdir)/MMCoreJ_wrap.cxx MMCoreJ_wrap.cxx || echo "No problem"
-	
+
 lib_LTLIBRARIES = libMMCoreJ_wrap.la
 nodist_libMMCoreJ_wrap_la_SOURCES = MMCoreJ_wrap.cxx
-libMMCoreJ_wrap_la_LIBADD = ../MMCore/libMMCore.la $(BOOST_SYSTEM_LIB) -ldl
+libMMCoreJ_wrap_la_LIBADD = ../MMCore/libMMCore.la
 # TODO Add -shrext .jnilib on OS X and normalize install target
-libMMCoreJ_wrap_la_LDFLAGS = -module -avoid-version $(BOOST_LDFLAGS)
+libMMCoreJ_wrap_la_LDFLAGS = -module -avoid-version
 
 $(srcdir)/MMCoreJ.jar:  MMCoreJ_wrap.cxx \
 	libMMCoreJ_wrap.la \
 	TaggedImage.java
 	mkdir -p mmcorej
 	cp TaggedImage.java mmcorej/
-	$(JAVAC) -source 1.5 -target 1.5 ../mmstudio/src/org/json/*.java mmcorej/*.java
+	$(JAVAC) $(JAVACFLAGS) ../mmstudio/src/org/json/*.java mmcorej/*.java
 	$(JAR) cvf MMCoreJ.jar mmcorej/*.class
 
 all:
@@ -72,9 +77,9 @@ macinstall:
 
 install:
 	install -d $(DESTDIR)$(DEVICEADAPTERPATH)
-	install .libs/libMMCoreJ_wrap.so $(DESTDIR)$(DEVICEADAPTERPATH)/libMMCoreJ_wrap$(JAVASO) 
+	install .libs/libMMCoreJ_wrap.so $(DESTDIR)$(DEVICEADAPTERPATH)/libMMCoreJ_wrap$(JAVASO)
 	install -d $(DESTDIR)$(JARPATH)
-	install MMCoreJ.jar $(DESTDIR)$(JARPATH)/MMCoreJ.jar 
+	install MMCoreJ.jar $(DESTDIR)$(JARPATH)/MMCoreJ.jar
 
 ###IJ-dependent! #todo: split IJ and pure-java code
 
