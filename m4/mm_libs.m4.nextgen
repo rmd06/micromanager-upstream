@@ -5,6 +5,7 @@
 # - Mark Tsuchida
 #
 # %nextgen_build_filename = mm_libs.m4
+# %nextgen_build_replaces = ax_opencv.m4 904b6d2016853877d07a19ce948445c6
 
 # Author: Mark Tsuchida
 # Copyright: University of California, San Francisco, 2014
@@ -24,6 +25,25 @@
 AC_DEFUN([MM_LIB_DC1394], [
    MM_LIB_WITH_PKG_CONFIG([LIBDC1394], [libdc1394], [libdc1394-2], [],
       [$1], [-ldc1394], [dc1394/dc1394.h], [dc1394_capture_is_frame_corrupt],
+      [$2], [$3])
+])
+
+
+AC_DEFUN([MM_LIB_FREEIMAGEPLUS], [
+   AC_LANG_PUSH([C++])
+   MM_LIB_SIMPLE_CXX([FREEIMAGEPLUS], [FreeImagePlus],
+      [$1], [-lfreeimageplus -lfreeimage], [FreeImagePlus.h],
+      dnl No particular reason for the choice of function to check for.
+      [AC_LANG_PROGRAM([[#include <FreeImagePlus.h>]],
+                       [[fipImage fimg;]])],
+      [$2], [$3])
+   AC_LANG_POP([C++])
+])
+
+
+AC_DEFUN([MM_LIB_GPHOTO2], [
+   MM_LIB_WITH_PKG_CONFIG([GPHOTO2], [libgphoto2], [libgphoto2 >= 2.5.1], [],
+      [$1], [-lgphoto2], [gphoto2/gphoto2.h], [gp_camera_capture],
       [$2], [$3])
 ])
 

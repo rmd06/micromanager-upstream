@@ -40,7 +40,7 @@ import javax.swing.*;
 
 import net.miginfocom.swing.MigLayout;
 
-import org.micromanager.MMStudioMainFrame;
+import org.micromanager.api.ScriptInterface;
 import org.micromanager.internalinterfaces.LiveModeListener;
 import org.micromanager.utils.NumberUtils;
 import org.micromanager.utils.ReportingUtils;
@@ -59,7 +59,7 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
    private final Positions positions_;
    private final Cameras cameras_;
    private final Prefs prefs_;
-   // private final String panelName_;
+   private final ScriptInterface gui_;
    private final CMMCore core_;
    private String port_;  // needed to send serial commands directly
    private final JoystickSubPanel joystickPanel_;
@@ -83,8 +83,9 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
    private final JLabel piezoStartPositionLabel_;
    final JLabel piezoEndPositionLabel_;
 
-   public SetupPanel(Devices devices, Properties props, Joystick joystick, Devices.Sides side,
-           Positions positions, Cameras cameras, Prefs prefs) {
+   public SetupPanel(ScriptInterface gui, Devices devices, Properties props, 
+           Joystick joystick, Devices.Sides side, Positions positions, 
+           Cameras cameras, Prefs prefs) {
       super("Setup Path " + side.toString(),
               new MigLayout(
               "",
@@ -97,7 +98,8 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
       positions_ = positions;
       cameras_ = cameras;
       prefs_ = prefs;
-      core_ = MMStudioMainFrame.getInstance().getCore();
+      gui_ = gui;
+      core_ = gui_.getMMCore();
       PanelUtils pu = new PanelUtils();
 
       piezoImagingDeviceKey_ = Devices.getSideSpecificKey(Devices.Keys.PIEZOA, side);
@@ -160,14 +162,14 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
 
 
       tmp_but = new JButton("Set start");
-      tmp_but.setToolTipText("Use with imaging piezo position \"Set start\" when focused");
+      tmp_but.setToolTipText("Saves start position for imaging piezo and scanner slice (should be focused)");
       tmp_but.setOpaque(true);
       tmp_but.setBackground(Color.red);
       tmp_but.addActionListener(new ActionListener() {
          @Override
          public void actionPerformed(ActionEvent e) {
             try {
-               // TODO use positions_ for this instead of core call
+               // bypass cached positions in positions_ in case they aren't current
                Point2D.Double pt = core_.getGalvoPosition(
                        devices_.getMMDeviceException(micromirrorDeviceKey_));
                sheetStartPos_ = pt.y;
@@ -185,7 +187,7 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
 
 
       tmp_but = new JButton("Set end");
-      tmp_but.setToolTipText("Use with imaging piezo position \"Set end\" when focused");
+      tmp_but.setToolTipText("Saves end position for imaging piezo and scanner slice (should be focused)");
       tmp_but.setContentAreaFilled(false);
       tmp_but.setOpaque(true);
       tmp_but.setBackground(Color.red);
@@ -193,6 +195,7 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
          @Override
          public void actionPerformed(ActionEvent e) {
             try {
+               // bypass cached positions in positions_ in case they aren't current
                Point2D.Double pt = core_.getGalvoPosition(
                        devices_.getMMDeviceException(micromirrorDeviceKey_));
                sheetStopPos_ = pt.y;
@@ -308,7 +311,7 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
       sheetPanel.add(new JLabel("Sheet width:"));
       sheetPanel.add(new JLabel(""), "span 2");   // TODO update this label with current value
       JSlider tmp_sl = pu.makeSlider(0, // 0 is min amplitude
-              props_.getPropValueFloat(micromirrorDeviceKey_, Properties.Keys.MAX_DEFLECTION_X) - props_.getPropValueFloat(micromirrorDeviceKey_, Properties.Keys.MIN_DEFLECTION_X), // compute max amplitude
+              props_.getPropValueFloat(micromirrorDeviceKey_,Properties.Keys.MAX_DEFLECTION_X) - props_.getPropValueFloat(micromirrorDeviceKey_, Properties.Keys.MIN_DEFLECTION_X), // compute max amplitude
               1000, // the scale factor between internal integer representation and float representation
               props_, devices_, micromirrorDeviceKey_, Properties.Keys.SA_AMPLITUDE_X_DEG);
       sheetPanel.add(tmp_sl, "span 4, growx, center, wrap");
@@ -325,7 +328,8 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
 
 
       // Layout of the SetupPanel
-      joystickPanel_ = new JoystickSubPanel(joystick_, devices_, panelName_, side, prefs_);
+      joystickPanel_ = new JoystickSubPanel(joystick_, devices_, panelName_, side, 
+              prefs_);
       add(joystickPanel_, "center");
 
       sheetPanel.setBorder(BorderFactory.createLineBorder(ASIdiSPIM.borderColor));
@@ -336,12 +340,14 @@ public final class SetupPanel extends ListeningJPanel implements LiveModeListene
       add(beamPanel_, "center, wrap");
 
 
-      cameraPanel_ = new CameraSubPanel(cameras_, devices_, panelName_, side, prefs_, true);
+      cameraPanel_ = new CameraSubPanel(gui_, cameras_, devices_, panelName_, 
+              side, prefs_, true);
       cameraPanel_.setBorder(BorderFactory.createLineBorder(ASIdiSPIM.borderColor));
       add(cameraPanel_, "center");
 
       // set scan waveform to be triangle, just like SPIM is
-      props_.setPropValue(micromirrorDeviceKey_, Properties.Keys.SA_PATTERN_X, Properties.Values.SAM_TRIANGLE, true);
+      props_.setPropValue(micromirrorDeviceKey_, Properties.Keys.SA_PATTERN_X, 
+              Properties.Values.SAM_TRIANGLE, true);
 
    }// end of SetupPanel constructor
 

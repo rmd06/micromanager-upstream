@@ -6,6 +6,7 @@
 #
 # %nextgen_build_filename = configure.ac
 # %nextgen_build_replaces = configure.in 6a5c8ae459a90385c40d913c3ec21b0e
+# %nextgen_build_replaces = MMDEVAPI.rules d7c8f39a3d64d6155ed51cd3a754fec3
 
 AC_PREREQ([2.64])
 AC_INIT([Micro-Manager], [1.4], [info@micro-manager.org])
@@ -13,8 +14,7 @@ AC_CONFIG_MACRO_DIR([../m4])
 AC_CONFIG_SRCDIR([DemoCamera/DemoCamera.cpp])
 AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE
-AC_DISABLE_STATIC
-AC_PROG_LIBTOOL
+LT_INIT([disable-static])
 
 m4_include([../configure.common])
 
@@ -41,6 +41,14 @@ AC_SUBST(MMDEVAPI_LDFLAGS)
 
 # Location of third party public files
 thirdpartypublic="${micromanager_path}/../3rdpartypublic"
+
+# Currently, the device adapter Makefile.am's set pkglibdir to
+# DEVICEADAPTERPATH. We should eliminate DEVICEADAPTERPATH in favor of either
+# just using pkglibdir or using deviceadapterdir together with Automake
+# variables like deviceadapter_LTLIBRARIES. But keep DEVICEADAPTERPATH for now.
+# See also: definition in SecretDeviceAdapters/configure.ac
+DEVICEADAPTERPATH="\${pkglibdir}"
+AC_SUBST([DEVICEADAPTERPATH])
 
 
 # libusb 0.1 or libusb-compat
@@ -193,114 +201,43 @@ else
 fi
 
 
-
-PKG_PROG_PKG_CONFIG
-PKG_CHECK_MODULES([GPHOTO2], [libgphoto2 >= 2.5.1], [have_libgphoto2=yes], [have_libgphoto2=no])
-
-# Libtool dynamic loading library (used by libgphoto2)
-AC_MSG_CHECKING(for libltdl)
-AC_ARG_WITH([ltdl], [AS_HELP_STRING([--with-ltdl=path], [use libltdl at path])],
-   [LIBLTDLPATH="$withval"], [LIBLTDLPATH="yes"])
-case $LIBLTDLPATH in
-   yes)
-      ltdl_libdirs="/usr/local/lib /usr/lib /usr/lib64"
-      ;;
-   no)
-       AC_MSG_RESULT([libltdl required for GPhoto2 (SimpleCam) but disabled on command line])
-      ltdl_libdirs=""
-      ;;
-   *)
-      ltdl_libdirs="$LIBLTDLPATH"
-      ;;
-esac
-# XXX This is broken on non-OS X! We shouldn't be using AC_FIND_FILE for a
-# library anyway.
-AC_FIND_FILE([libltdl.dylib], [$ltdl_libdirs], LIBLTDLPATH)
-if test x$LIBLTDLPATH = xNO; then
-   AC_MSG_RESULT(["libltdl not found, cannot build GPhoto2 (SimpleCam) adapter"])
-else
-   AC_MSG_RESULT(["libltdl" found])
-   LIBLTDL="$LIBLTDLPATH/libltdl.dylib"
-
-   # SimpleCam - GPhoto
-   if test x$have_libgphoto2 = xno; then
-      buildsc=false
-      AC_MSG_RESULT([not found])
-   else
-      AC_MSG_RESULT([found])
-      GPHOTO2_VERSION=`$PKG_CONFIG --modversion libgphoto2`
-      GPHOTO2_PORT_VERSION=`$PKG_CONFIG --modversion libgphoto2_port`
-      GPHOTO2_LIBDIR=`$PKG_CONFIG --variable=libdir libgphoto2`
-      LIBGPHOTO2LIBDIR=`$PKG_CONFIG --variable=libdir libgphoto2`
-      buildsc=false
-      if test -f "$LIBGPHOTO2LIBDIR/libgphoto2.la"; then
-         LIBGPHOTO2="$LIBGPHOTO2LIBDIR/libgphoto2.la $LIBLTDL"
-         buildsc=true
-      else
-         if test -f "$LIBGPHOTO2LIBDIR/libgphoto2.so"; then
-            LIBGPHOTO2="-lgphoto2"
-            buildsc=true
-         fi
-      fi
-   fi
-fi
+MM_ARG_WITH_OPTIONAL_LIB([libgphoto2], [gphoto2], [GPHOTO2])
+AS_IF([test "x$want_gphoto2" != xno],
+[
+   MM_LIB_GPHOTO2([$GPHOTO2_PREFIX],
+   [
+      use_gphoto2=yes
+   ],
+   [
+      use_gphoto2=no
+      AS_IF([test "x$want_gphoto2" = xyes],
+            [MM_MSG_OPTIONAL_LIB_FAILURE([libgphoto2], [gphoto2])])
+   ])
+],
+[use_gphoto2=no])
 
 
-# On mac, install dynamic gphoto2 libraries 
-case $host in
-   *apple-darwin*)
-      AC_SUBST([INSTALL_LIBGPHOTO], [install_macos])
-      ;;
-   *)
-      AC_SUBST([INSTALL_LIBGPHOTO], [install_linux])
-      ;;
-esac
-AC_SUBST(GPHOTO2_CFLAGS)
-AC_SUBST(GPHOTO2_LIBS)
-AC_SUBST(GPHOTO2_LIBDIR)
-AC_SUBST(GPHOTO2_VERSION)
-AC_SUBST(GPHOTO2_PORT_VERSION)
-AC_SUBST(LIBGPHOTO2)
-AC_SUBST(LIBLTDL)
+MM_ARG_WITH_OPTIONAL_LIB([FreeImagePlus], [freeimageplus], [FREEIMAGEPLUS])
+AS_IF([test "x$want_freeimageplus" != xno],
+[
+   MM_LIB_FREEIMAGEPLUS([$FREEIMAGEPLUS_PREFIX],
+   [
+      use_freeimageplus=yes
+   ],
+   [
+      use_freeimageplus=no
+      AS_IF([test "x$want_freeimageplus" = xyes],
+            [MM_MSG_OPTIONAL_LIB_FAILURE([FreeImagePlus], [freeimageplus])])
+   ])
+],
+[use_freeimageplus=no])
 
-# LibFreeImage
-AC_MSG_CHECKING(for libFreeImage headers)
-AC_FIND_FILE([FreeImage.h], [/usr/local/include /usr/include ${thirdpartypublic}/FreeImage/Dist], FREEIMAGEINCDIR)
-AM_CONDITIONAL([LIBFREEIMAGEFOUND], [test -f "$FREEIMAGEINCDIR/FreeImage.h"])
-if test -f "$FREEIMAGEINCDIR/FreeImage.h"; then
-   AC_MSG_RESULT([found])
-   
-   AC_FIND_FILE([libfreeimage.a], [/usr/lib /usr/lib64 /usr/local/lib], FREEIMAGELIBDIR)
-   if test x$FREEIMAGELIBDIR = xNO; then
-      buildsc=false
-      AC_MSG_RESULT(["libfreeimage.a" not found...])
-   else
-      AC_MSG_RESULT(["libfreeimage.a" found])
-      AC_SUBST(LIBFREEIMAGE, "$FREEIMAGELIBDIR/libfreeimage.a")
-      AC_SUBST(LIBFREEIMAGE_CXXFLAGS, "-I$FREEIMAGEINCDIR")
-   fi
-   
-   AC_MSG_CHECKING(for libFreeImagePlus headers)
-   AC_FIND_FILE([FreeImagePlus.h], [/usr/local/include /usr/include ${thirdpartypublic}/FreeImage/Wrapper/FreeImagePlus], FREEIMAGEPLUSINCDIR)
-   if test -f "$FREEIMAGEPLUSINCDIR/FreeImagePlus.h"; then
-      AC_MSG_RESULT([found])
-      AC_SUBST(LIBFREEIMAGEPLUS_CXXFLAGS, "-I$FREEIMAGEPLUSINCDIR")
-      AC_FIND_FILE([libfreeimageplus.a], [/usr/lib /usr/lib64 /usr/local/lib], FREEIMAGEPLUSLIBDIR)
-      if test x$FREEIMAGEPLUSLIBDIR = xNO; then
-         AC_MSG_RESULT(["libfreeimageplus.a" not found (can be ok)])
-      else
-         AC_MSG_RESULT(["libfreeimageplus.a" found])
-         AC_SUBST(LIBFREEIMAGEPLUS, "$FREEIMAGEPLUSLIBDIR/libfreeimageplus.a")
-      fi
-   else
-      AC_MSG_RESULT([not found])
-   fi
-fi
-if test x$FREEIMAGELIBDIR = xNO; then
-   buildsc=false
-   AC_MSG_RESULT([not found: To build the GPhoto device adapter download and install FreeImage in ../../3rdpartypublic/FreeImage])
-fi
-AM_CONDITIONAL([BUILD_SIMPLECAM], [test x$buildsc = xtrue])
+
+build_simplecam=no
+test "x$use_gphoto2" = xyes && {
+   test "x$use_freeimageplus" = xyes && build_simplecam=yes; }
+AM_CONDITIONAL([BUILD_SIMPLECAM], [test "x$build_simplecam" = xyes])
+
 
 # Video4linux
 AC_MSG_CHECKING(for Video4linux2)
@@ -410,123 +347,135 @@ AC_SUBST(MMPREFIX)
 AC_HEADER_STDC
 AC_CHECK_FUNCS([memset])
 
-AC_CONFIG_FILES(
-	[Makefile]
-	[AAAOTF/Makefile:AAAOTF/Makefile.in:MMDEVAPI.rules]
-	[AOTF/Makefile:AOTF/Makefile.in:MMDEVAPI.rules]
-	[Aladdin/Makefile:Aladdin/Makefile.in:MMDEVAPI.rules]
-	[Andor/Makefile:Andor/Makefile.in:MMDEVAPI.rules]
-	[AndorLaserCombiner/Makefile:AndorLaserCombiner/Makefile.in:MMDEVAPI.rules]
-	[Aquinas/Makefile:Aquinas/Makefile.in:MMDEVAPI.rules]
-	[Arduino/Makefile:Arduino/Makefile.in:MMDEVAPI.rules]
-	[ASIFW1000/Makefile:ASIFW1000/Makefile.in:MMDEVAPI.rules]
-	[ASIStage/Makefile:ASIStage/Makefile.in:MMDEVAPI.rules]
-	[ASITiger/Makefile:ASITiger/Makefile.in:MMDEVAPI.rules]
-	[ASIWPTR/Makefile:ASIWPTR/Makefile.in:MMDEVAPI.rules]
-	[CARVII/Makefile:CARVII/Makefile.in:MMDEVAPI.rules]
-	[Cobolt/Makefile:Cobolt/Makefile.in:MMDEVAPI.rules]
-	[CoherentCube/Makefile:CoherentCube/Makefile.in:MMDEVAPI.rules]
-	[Conix/Makefile:Conix/Makefile.in:MMDEVAPI.rules]
-	[Corvus/Makefile:Corvus/Makefile.in:MMDEVAPI.rules]
-	[CSUW1/Makefile:CSUW1/Makefile.in:MMDEVAPI.rules]
-	[DTOpenLayer/Makefile:DTOpenLayer/Makefile.in:MMDEVAPI.rules]
-	[DemoCamera/Makefile:DemoCamera/Makefile.in:MMDEVAPI.rules]
-	[FreeSerialPort/Makefile:FreeSerialPort/Makefile.in:MMDEVAPI.rules]
-	[FocalPoint/Makefile:FocalPoint/Makefile.in:MMDEVAPI.rules]
-	[IDS_uEye/Makefile:IDS_uEye/Makefile.in:MMDEVAPI.rules]
-	[IIDC/Makefile:IIDC/Makefile.in:MMDEVAPI.rules]
-	[ITC18/Makefile:ITC18/Makefile.in:MMDEVAPI.rules]
-	[ImageProcessorChain/Makefile:ImageProcessorChain/Makefile.in:MMDEVAPI.rules]
-	[K8055/Makefile:K8055/Makefile.in:MMDEVAPI.rules]
-	[K8061/Makefile:K8061/Makefile.in:MMDEVAPI.rules]
-	[LeicaDMI/Makefile:LeicaDMI/Makefile.in:MMDEVAPI.rules]
-	[LeicaDMR/Makefile:LeicaDMR/Makefile.in:MMDEVAPI.rules]
-	[LeicaDMSTC/Makefile:LeicaDMSTC/Makefile.in:MMDEVAPI.rules]
-	[Ludl/Makefile:Ludl/Makefile.in:MMDEVAPI.rules]
-	[LudlLow/Makefile:LudlLow/Makefile.in:MMDEVAPI.rules]
-	[LumencorSpectra/Makefile:LumencorSpectra/Makefile.in:MMDEVAPI.rules]
-	[MaestroServo/Makefile:MaestroServo/Makefile.in:MMDEVAPI.rules]
-	[Marzhauser/Makefile:Marzhauser/Makefile.in:MMDEVAPI.rules]
-	[Marzhauser-LStep/Makefile:Marzhauser-LStep/Makefile.in:MMDEVAPI.rules]
-   [MicroPoint/Makefile:MicroPoint/Makefile.in:MMDEVAPI.rules]
-   [Motic_mac/Makefile:Motic_mac/Makefile.in:MMDEVAPI.rules]
-	[MP285/Makefile:MP285/Makefile.in:MMDEVAPI.rules]
-	[Neos/Makefile:Neos/Makefile.in:MMDEVAPI.rules]
-	[Nikon/Makefile:Nikon/Makefile.in:MMDEVAPI.rules]
-	[NikonTE2000/Makefile:NikonTE2000/Makefile.in:MMDEVAPI.rules]
-	[nPoint/Makefile:nPoint/Makefile.in:MMDEVAPI.rules]
-	[OpenCVgrabber/Makefile:OpenCVgrabber/Makefile.in:MMDEVAPI.rules]
-	[Omicron/Makefile:Omicron/Makefile.in:MMDEVAPI.rules]
-	[Oxxius/Makefile:Oxxius/Makefile.in:MMDEVAPI.rules]
-   [ParallelPort/Makefile:ParallelPort/Makefile.in:MMDEVAPI.rules]
-	[Pecon/Makefile:Pecon/Makefile.in:MMDEVAPI.rules]
-	[pgFocus/Makefile:pgFocus/Makefile.in:MMDEVAPI.rules]
-	[PI/Makefile:PI/Makefile.in:MMDEVAPI.rules]
-	[PI_GCS/Makefile:PI_GCS/Makefile.in:MMDEVAPI.rules]
-	[PI_GCS_2/Makefile:PI_GCS_2/Makefile.in:MMDEVAPI.rules]
-	[Piezosystem_30DV50/Makefile:Piezosystem_30DV50/Makefile.in:MMDEVAPI.rules]
-	[Piezosystem_dDrive/Makefile:Piezosystem_dDrive/Makefile.in:MMDEVAPI.rules]
-	[Piezosystem_NV120_1/Makefile:Piezosystem_NV120_1/Makefile.in:MMDEVAPI.rules]
-	[Piezosystem_NV40_1/Makefile:Piezosystem_NV40_1/Makefile.in:MMDEVAPI.rules]
-	[Piezosystem_NV40_3/Makefile:Piezosystem_NV40_3/Makefile.in:MMDEVAPI.rules]
-	[PVCAM/Makefile:PVCAM/Makefile.in:MMDEVAPI.rules]
-	[PrecisExcite/Makefile:PrecisExcite/Makefile.in:MMDEVAPI.rules]
-	[PrincetonInstruments/Makefile:PrincetonInstruments/Makefile.in:MMDEVAPI.rules]
-	[Prior/Makefile:Prior/Makefile.in:MMDEVAPI.rules]
-	[PriorLegacy/Makefile:PriorLegacy/Makefile.in:MMDEVAPI.rules]
-	[QCam/Makefile:QCam/Makefile.in:MMDEVAPI.rules]
-   [Scientifica/Makefile:Scientifica/Makefile.in:MMDEVAPI.rules]
-	[Sapphire/Makefile:Sapphire/Makefile.in:MMDEVAPI.rules]
-	[ScionCam/Makefile:ScionCam/Makefile.in:MMDEVAPI.rules]
-	[Sensicam/Makefile:Sensicam/Makefile.in:MMDEVAPI.rules]
-	[SimpleCam/Makefile:SimpleCam/Makefile.in:MMDEVAPI.rules]
-	[SpectralLMM5/Makefile:SpectralLMM5/Makefile.in:MMDEVAPI.rules]
-	[Spot/Makefile:Spot/Makefile.in:MMDEVAPI.rules]
-	[SutterLambda/Makefile:SutterLambda/Makefile.in:MMDEVAPI.rules]
-	[SutterStage/Makefile:SutterStage/Makefile.in:MMDEVAPI.rules]
-	[SerialManager/Makefile:SerialManager/Makefile.in:MMDEVAPI.rules]
-	[SimpleAutofocus/Makefile:SimpleAutofocus/Makefile.in:MMDEVAPI.rules]
-	[Thorlabs/Makefile:Thorlabs/Makefile.in:MMDEVAPI.rules]
-	[ThorlabsDCxxxx/Makefile:ThorlabsDCxxxx/Makefile.in:MMDEVAPI.rules]
-	[ThorlabsFilterWheel/Makefile:ThorlabsFilterWheel/Makefile.in:MMDEVAPI.rules]
-	[ThorlabsSC10/Makefile:ThorlabsSC10/Makefile.in:MMDEVAPI.rules]
-	[Tofra/Makefile:Tofra/Makefile.in:MMDEVAPI.rules]
-	[USBManager/Makefile:USBManager/Makefile.in:MMDEVAPI.rules]
-	[HIDManager/Makefile:HIDManager/Makefile.in:MMDEVAPI.rules]
-   [Utilities/Makefile:Utilities/Makefile.in:MMDEVAPI.rules]
-   [VariLC/Makefile:VariLC/Makefile.in:MMDEVAPI.rules]
-	[Video4Linux/Makefile:Video4Linux/Makefile.in:MMDEVAPI.rules]
-	[Vincent/Makefile:Vincent/Makefile.in:MMDEVAPI.rules]
-   [Vortran/Makefile:Vortran/Makefile.in:MMDEVAPI.rules]
-	[XCite120PC_Exacte/Makefile:XCite120PC_Exacte/Makefile.in:MMDEVAPI.rules]
-	[XCiteLed/Makefile:XCiteLed/Makefile.in:MMDEVAPI.rules]
-	[Xcite/Makefile:Xcite/Makefile.in:MMDEVAPI.rules]
-	[XLight/Makefile:XLight/Makefile.in:MMDEVAPI.rules]
-	[Yokogawa/Makefile:Yokogawa/Makefile.in:MMDEVAPI.rules]
-	[Zaber/Makefile:Zaber/Makefile.in:MMDEVAPI.rules]
-	[ZeissCAN/Makefile:ZeissCAN/Makefile.in:MMDEVAPI.rules]
-	[ZeissCAN29/Makefile:ZeissCAN29/Makefile.in:MMDEVAPI.rules]
-	[dc1394/Makefile:dc1394/Makefile.in:MMDEVAPI.rules]
-	[kdv/Makefile:kdv/Makefile.in:MMDEVAPI.rules]
-)
+
+# Please keep the list of device adapter directories in ASCII-lexical order,
+# with an indent of 3 spaces (no tabs)!
+m4_define([device_adapter_dirs], [m4_strip([
+   AAAOTF
+   AOTF
+   ASIFW1000
+   ASIStage
+   ASITiger
+   ASIWPTR
+   Aladdin
+   Andor
+   AndorLaserCombiner
+   Aquinas
+   Arduino
+   CARVII
+   CSUW1
+   Cobolt
+   CoherentCube
+   Conix
+   Corvus
+   DTOpenLayer
+   DemoCamera
+   FocalPoint
+   FreeSerialPort
+   HIDManager
+   IDS_uEye
+   IIDC
+   ITC18
+   ImageProcessorChain
+   K8055
+   K8061
+   LeicaDMI
+   LeicaDMR
+   LeicaDMSTC
+   Ludl
+   LudlLow
+   LumencorSpectra
+   MP285
+   MaestroServo
+   Marzhauser-LStep
+   Marzhauser
+   MicroPoint
+   Motic_mac
+   Neos
+   Nikon
+   NikonTE2000
+   Omicron
+   OpenCVgrabber
+   Oxxius
+   PI
+   PI_GCS
+   PI_GCS_2
+   PVCAM
+   ParallelPort
+   Pecon
+   Piezosystem_30DV50
+   Piezosystem_NV120_1
+   Piezosystem_NV40_1
+   Piezosystem_NV40_3
+   Piezosystem_dDrive
+   PrecisExcite
+   PrincetonInstruments
+   Prior
+   PriorLegacy
+   QCam
+   Sapphire
+   Scientifica
+   ScionCam
+   Sensicam
+   SerialManager
+   SimpleAutofocus
+   SimpleCam
+   SpectralLMM5
+   Spot
+   SutterLambda
+   SutterStage
+   Thorlabs
+   ThorlabsDCxxxx
+   ThorlabsFilterWheel
+   ThorlabsSC10
+   Tofra
+   USBManager
+   Utilities
+   VariLC
+   Video4Linux
+   Vincent
+   Vortran
+   XCite120PC_Exacte
+   XCiteLed
+   XLight
+   Xcite
+   Yokogawa
+   Zaber
+   ZeissCAN
+   ZeissCAN29
+   dc1394
+   kdv
+   nPoint
+   pgFocus
+])])
+
+AC_CONFIG_FILES(Makefile m4_map_args_w(device_adapter_dirs, [], [/Makefile], [ ]))
 
 AC_OUTPUT
 
+
+# Show a summary of the configuration
 echo ""
 echo "m4_text_box([DeviceAdapters configuration])"
 echo ""
 echo "Note: This is an incomplete list currently under development."
 echo ""
+echo "m4_text_wrap([$use_freeimageplus],
+                   [                                            ],
+                   [    Build with FreeImagePlus:               ])"
 echo "m4_text_wrap([$use_hidapi],
-		   [                                         ],
-		   [    HIDAPI support:                      ])"
+                   [                                            ],
+                   [    Build with HIDAPI:                      ])"
 echo "m4_text_wrap([$use_libdc1394],
-		   [                                         ],
-		   [    libdc1394 support:                   ])"
+                   [                                            ],
+                   [    Build with libdc1394:                   ])"
+echo "m4_text_wrap([$use_gphoto2],
+                   [                                            ],
+                   [    Build with libgphoto2:                  ])"
 echo "m4_text_wrap([$use_libusb_0_1],
-		   [                                         ],
-		   [    libusb 0.1 (libusb-compat) support:  ])"
+                   [                                            ],
+                   [    Build with libusb 0.1 (libusb-compat):  ])"
 echo "m4_text_wrap([$use_opencv],
-		   [                                         ],
-		   [    OpenCV support:                      ])"
+                   [                                            ],
+                   [    Build with OpenCV:                      ])"
 echo ""

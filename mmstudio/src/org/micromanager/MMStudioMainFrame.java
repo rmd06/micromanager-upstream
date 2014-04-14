@@ -266,9 +266,9 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
                  "Micro-Manager Image Location",
                  System.getProperty("user.home") + "/Untitled",
                  false, (String[]) null);
-   private Thread acquisitionEngine2010LoadingThread = null;
-   private Class<?> acquisitionEngine2010Class = null;
-   private IAcquisitionEngine2010 acquisitionEngine2010 = null;
+   private Thread acquisitionEngine2010LoadingThread_ = null;
+   private Class<?> acquisitionEngine2010Class_ = null;
+   private IAcquisitionEngine2010 acquisitionEngine2010_ = null;
    private final JSplitPane splitPane_;
    private volatile boolean ignorePropertyChanges_; 
    private PluginLoader pluginLoader_;
@@ -778,7 +778,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
             }
             initializeSimpleAcquisition(SIMPLE_ACQ, width, height, depth, bitDepth, numCamChannels);
             getAcquisition(SIMPLE_ACQ).promptToSave(false);
-            getAcquisition(SIMPLE_ACQ).toFront();
+            getAcquisition(SIMPLE_ACQ).getAcquisitionWindow().getHyperImage().getWindow().toFront();
             this.updateCenterAndDragListener();
          }
       } catch (Exception ex) {
@@ -820,7 +820,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
             }
             initializeSimpleAcquisition(SIMPLE_ACQ, width, height, depth, bitDepth, numCamChannels);
             getAcquisition(SIMPLE_ACQ).promptToSave(false);
-            getAcquisition(SIMPLE_ACQ).toFront();
+            getAcquisition(SIMPLE_ACQ).getAcquisitionWindow().getHyperImage().getWindow().toFront();
             this.updateCenterAndDragListener();
          }
       } catch (Exception ex) {
@@ -1584,18 +1584,18 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
 
    private void startLoadingPipelineClass() {
       Thread.currentThread().setContextClassLoader(this.getClass().getClassLoader());
-      acquisitionEngine2010LoadingThread = new Thread("Pipeline Class loading thread") {
+      acquisitionEngine2010LoadingThread_ = new Thread("Pipeline Class loading thread") {
          @Override
          public void run() {
             try {
-               acquisitionEngine2010Class  = Class.forName("org.micromanager.AcquisitionEngine2010");
+               acquisitionEngine2010Class_  = Class.forName("org.micromanager.AcquisitionEngine2010");
             } catch (Exception ex) {
                ReportingUtils.logError(ex);
-               acquisitionEngine2010Class = null;
+               acquisitionEngine2010Class_ = null;
             }
          }
       };
-      acquisitionEngine2010LoadingThread.start();
+      acquisitionEngine2010LoadingThread_.start();
    }
 
 
@@ -2811,8 +2811,8 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
 
    //TODO: Deprecated @Override
    public void stopAllActivity() {
-        if (this.acquisitionEngine2010 != null) {
-            this.acquisitionEngine2010.stop();
+        if (this.acquisitionEngine2010_ != null) {
+            this.acquisitionEngine2010_.stop();
         }
       enableLiveMode(false);
    }
@@ -3871,42 +3871,51 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
     * The basic method for adding images to an existing data set.
     * If the acquisition was not previously initialized, it will attempt to initialize it from the available image data
     */
-   public void addImageToAcquisition(String name, int frame, int channel, int slice, int position, TaggedImage taggedImg) throws MMScriptException {
-	   // TODO: complete the tag set and initialize the acquisition
-	   MMAcquisition acq = acqMgr_.getAcquisition(name);
-	   
-	   // check position, for multi-position data set the number of declared positions should be at least 2
-	   if (acq.getPositions() <= 1 && position > 0) {
-	      throw new MMScriptException("The acquisition was open as a single position data set.\n"
-	            + "Open acqusition with two or more positions in order to crate a multi-position data set.");
-	   }
-	   
-	   // check position, for multi-position data set the number of declared positions should be at least 2
-      if (acq.getChannels() <= channel) {
-         throw new MMScriptException("This acquisition was opened with " + acq.getChannels() + " channels.\n"
-               + "The channel number must not exceed declared number of positions.");
+   public void addImageToAcquisition(String name,
+           int frame,
+           int channel,
+           int slice,
+           int position,
+           TaggedImage taggedImg) throws MMScriptException {
+
+      // TODO: complete the tag set and initialize the acquisition
+      MMAcquisition acq = acqMgr_.getAcquisition(name);
+
+      int positions = acq.getPositions();
+      
+      // check position, for multi-position data set the number of declared positions should be at least 2
+      if (acq.getPositions() <= 1 && position > 0) {
+         throw new MMScriptException("The acquisition was open as a single position data set.\n"
+                 + "Open acqusition with two or more positions in order to crate a multi-position data set.");
       }
 
-	   
+      // check position, for multi-position data set the number of declared positions should be at least 2
+      if (acq.getChannels() <= channel) {
+         throw new MMScriptException("This acquisition was opened with " + acq.getChannels() + " channels.\n"
+                 + "The channel number must not exceed declared number of positions.");
+      }
+
+
       JSONObject tags = taggedImg.tags;
-	   
-	   // if the acquisition was not previously initialized, set physical dimensions of the image
+
+      // if the acquisition was not previously initialized, set physical dimensions of the image
       if (!acq.isInitialized()) {
-         
+
          // automatically initialize physical dimensions of the image
          try {
             int width = tags.getInt(MMTags.Image.WIDTH);
             int height = tags.getInt(MMTags.Image.HEIGHT);
             int byteDepth = MDUtils.getDepth(tags);
             int bitDepth = byteDepth * 8;
-            if (tags.has(MMTags.Image.BIT_DEPTH))
-                  bitDepth = tags.getInt(MMTags.Image.BIT_DEPTH);
+            if (tags.has(MMTags.Image.BIT_DEPTH)) {
+               bitDepth = tags.getInt(MMTags.Image.BIT_DEPTH);
+            }
             initializeAcquisition(name, width, height, byteDepth, bitDepth);
          } catch (JSONException e) {
             throw new MMScriptException(e);
          }
       }
-      
+
       // create required coordinate tags
       try {
          tags.put(MMTags.Image.FRAME_INDEX, frame);
@@ -3914,36 +3923,37 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
          tags.put(MMTags.Image.CHANNEL_INDEX, channel);
          tags.put(MMTags.Image.SLICE_INDEX, slice);
          tags.put(MMTags.Image.POS_INDEX, position);
-         
+
          if (!tags.has(MMTags.Summary.SLICES_FIRST) && !tags.has(MMTags.Summary.TIME_FIRST)) {
             // add default setting
             tags.put(MMTags.Summary.SLICES_FIRST, true);
             tags.put(MMTags.Summary.TIME_FIRST, false);
          }
-         
+
          if (acq.getPositions() > 1) {
             // if no position name is defined we need to insert a default one
-            if (tags.has(MMTags.Image.POS_NAME))
-                  tags.put(MMTags.Image.POS_NAME, "Pos" + position);
+            if (tags.has(MMTags.Image.POS_NAME)) {
+               tags.put(MMTags.Image.POS_NAME, "Pos" + position);
+            }
          }
-         
+
          // update frames if necessary
          if (acq.getFrames() <= frame) {
-            acq.setProperty(MMTags.Summary.FRAMES, Integer.toString(frame+1));
+            acq.setProperty(MMTags.Summary.FRAMES, Integer.toString(frame + 1));
          }
-         
+
       } catch (JSONException e) {
          throw new MMScriptException(e);
       }
-      
+
       // System.out.println("Inserting frame: " + frame + ", channel: " + channel + ", slice: " + slice + ", pos: " + position);
-	   acq.insertImage(taggedImg);
+      acq.insertImage(taggedImg);
    }
-   
+
    @Override
    /**
-    * A quick way to implicitly snap an image and add it to the data set.
-    * Works in the same way as above.
+    * A quick way to implicitly snap an image and add it to the data set. Works
+    * in the same way as above.
     */
    public void snapAndAddImage(String name, int frame, int channel, int slice, int position) throws MMScriptException {
       TaggedImage ti;
@@ -3957,9 +3967,9 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
          MDUtils.setChannelIndex(ti.tags, channel);
          MDUtils.setFrameIndex(ti.tags, frame);
          MDUtils.setSliceIndex(ti.tags, slice);
-         
+
          MDUtils.setPositionIndex(ti.tags, position);
-                  
+
          MMAcquisition acq = acqMgr_.getAcquisition(name);
          if (!acq.isInitialized()) {
             long width = core_.getImageWidth();
@@ -3971,7 +3981,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
             acq.setImagePhysicalDimensions((int) width, (int) height, (int) depth, (int) bitDepth, multiCamNumCh);
             acq.initialize();
          }
-         
+
          if (acq.getPositions() > 1) {
             MDUtils.setPositionName(ti.tags, "Pos" + position);
          }
@@ -3982,21 +3992,20 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
       }
    }
 
-
    //@Override
    public void addImage(String name, TaggedImage img, boolean updateDisplay) throws MMScriptException {
       acqMgr_.getAcquisition(name).insertImage(img, updateDisplay);
    }
-   
+
    //@Override
-   public void addImage(String name, TaggedImage taggedImg, 
+   public void addImage(String name, TaggedImage taggedImg,
            boolean updateDisplay,
            boolean waitForDisplay) throws MMScriptException {
       acqMgr_.getAcquisition(name).insertImage(taggedImg, updateDisplay, waitForDisplay);
    }
-   
+
    //@Override
-   public void addImage(String name, TaggedImage taggedImg, int frame, int channel, 
+   public void addImage(String name, TaggedImage taggedImg, int frame, int channel,
            int slice, int position) throws MMScriptException {
       try {
          acqMgr_.getAcquisition(name).insertImage(taggedImg, frame, channel, slice, position);
@@ -4253,11 +4262,11 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    @Override
    public IAcquisitionEngine2010 getAcquisitionEngine2010() {
       try {
-         acquisitionEngine2010LoadingThread.join();
-         if (acquisitionEngine2010 == null) {
-            acquisitionEngine2010 = (IAcquisitionEngine2010) acquisitionEngine2010Class.getConstructor(ScriptInterface.class).newInstance(this);
+         acquisitionEngine2010LoadingThread_.join();
+         if (acquisitionEngine2010_ == null) {
+            acquisitionEngine2010_ = (IAcquisitionEngine2010) acquisitionEngine2010Class_.getConstructor(ScriptInterface.class).newInstance(this);
          }
-         return acquisitionEngine2010;
+         return acquisitionEngine2010_;
       } catch (Exception e) {
          ReportingUtils.logError(e);
          return null;

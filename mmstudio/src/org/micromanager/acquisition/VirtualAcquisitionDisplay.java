@@ -216,9 +216,7 @@ public class VirtualAcquisitionDisplay implements
    }
 
    public class MMCompositeImage extends CompositeImage implements IMMImagePlus {
-            
-      boolean paintPendingSetByMe_ = false;
-      
+                  
       MMCompositeImage(ImagePlus imgp, int type) {
          super(imgp, type);
       }
@@ -497,8 +495,8 @@ public class VirtualAcquisitionDisplay implements
       this.albumSaved_ = imageCache.isFinished();
       MMStudioMainFrame.getInstance().addMMListener(this);
    }
-
-   private void startup(JSONObject firstImageMetadata) {
+   
+   private void startup(JSONObject firstImageMetadata, AcquisitionVirtualStack avs) {
       mdPanel_ = MMStudioMainFrame.getInstance().getMetadataPanel();
       JSONObject summaryMetadata = getSummaryMetadata();
       int numSlices = 1;
@@ -540,7 +538,11 @@ public class VirtualAcquisitionDisplay implements
       numGrayChannels = numComponents_ * numChannels;
 
       if (imageCache_.getDisplayAndComments() == null || imageCache_.getDisplayAndComments().isNull("Channels")) {
-         imageCache_.setDisplayAndComments(getDisplaySettingsFromSummary(summaryMetadata));
+         try {
+            imageCache_.setDisplayAndComments(getDisplaySettingsFromSummary(summaryMetadata));
+         } catch (Exception ex) {
+            ReportingUtils.logError(ex, "Problem setting display and Comments");
+         }
       }
 
       int type = 0;
@@ -555,8 +557,12 @@ public class VirtualAcquisitionDisplay implements
       } catch (MMScriptException ex) {
          ReportingUtils.showError(ex, "Unable to determine acquisition type.");
       }
-      virtualStack_ = new AcquisitionVirtualStack(width, height, type, null,
-              imageCache_, numGrayChannels * numSlices * numFrames, this);
+      if (avs != null) {
+         virtualStack_ = avs;
+      } else {
+         virtualStack_ = new AcquisitionVirtualStack(width, height, type, null,
+                 imageCache_, numGrayChannels * numSlices * numFrames, this);
+      }
       if (summaryMetadata.has("PositionIndex")) {
          try {
             virtualStack_.setPositionIndex(MDUtils.getPositionIndex(summaryMetadata));
@@ -1022,7 +1028,6 @@ public class VirtualAcquisitionDisplay implements
 
    private ScrollbarWithLabel createPositionScrollbar() {
       final ScrollbarWithLabel pSelector = new ScrollbarWithLabel(null, 1, 1, 1, 2, 'p') {
-
          @Override
          public void setValue(int v) {
             if (this.getValue() != v) {
@@ -1037,7 +1042,6 @@ public class VirtualAcquisitionDisplay implements
       pSelector.setUnitIncrement(1);
       pSelector.setBlockIncrement(1);
       pSelector.addAdjustmentListener(new AdjustmentListener() {
-
          @Override
          public void adjustmentValueChanged(AdjustmentEvent e) {
             if (lockedPosition_ != -1) {
@@ -1186,7 +1190,7 @@ public class VirtualAcquisitionDisplay implements
       }
    }
 
-   public static JSONObject getDisplaySettingsFromSummary(JSONObject summaryMetadata) {
+   public static JSONObject getDisplaySettingsFromSummary(JSONObject summaryMetadata) throws Exception {
       JSONObject displaySettings = new JSONObject();
       try {
          //create empty display and comments object  
@@ -1246,7 +1250,8 @@ public class VirtualAcquisitionDisplay implements
             channels.put(channelObject);
          }
       } catch (Exception e) {
-         ReportingUtils.showError("Problem creating display and comments from summary metadata");        
+         // ReportingUtils.showError("Problem creating display and comments from summary metadata");       
+         throw(e);
       }
       return displaySettings;
    }
@@ -1308,9 +1313,9 @@ public class VirtualAcquisitionDisplay implements
 
    private void imageChangedWindowUpdate() {
       if (hyperImage_ != null && hyperImage_.isVisible()) {
-         TaggedImage ti = virtualStack_.getTaggedImage(hyperImage_.getCurrentSlice());
-         if (ti != null) {
-            controls_.newImageUpdate(ti.tags);
+         JSONObject md = getCurrentMetadata();
+         if (md != null) {
+            controls_.newImageUpdate(md);
          }
       }
    }
@@ -1434,7 +1439,7 @@ public class VirtualAcquisitionDisplay implements
 
             if (hyperImage_ == null) {
                // this has to run on the EDT
-               startup(tags);
+               startup(tags, null);
             }
 
             int channel = 0, frame = 0, slice = 0, position = 0, superChannel = 0;
@@ -1950,19 +1955,12 @@ public class VirtualAcquisitionDisplay implements
       win.setLocation(newLocation);
    }
 
+   //Return metadata associated with image currently shown in the viewer
    public JSONObject getCurrentMetadata() {
-      try {
-         if (hyperImage_ != null) {
-            TaggedImage image = virtualStack_.getTaggedImage(hyperImage_.getChannel()-1, hyperImage_.getSlice()-1, hyperImage_.getFrame()-1);
-            if (image != null) {
-               return image.tags;
-            } else {
-               return null;
-            }
-         } else {
-            return null;
-         }
-      } catch (NullPointerException ex) {
+      if (hyperImage_ != null) {
+         JSONObject md = virtualStack_.getImageTags(hyperImage_.getCurrentSlice());
+         return md;
+      } else {
          return null;
       }
    }
@@ -2123,14 +2121,18 @@ public class VirtualAcquisitionDisplay implements
       }
    }
 
-   public void show() {
+   //This method exists in addition to the other show method
+   // so that plugins can utilize virtual acqusition display with a custom virtual stack
+   //allowing manipulation of displayed images without changing underlying data
+   //should probably be reconfigured to work through some sort of interface in the future
+   public void show(final AcquisitionVirtualStack avs) {
       if (hyperImage_ == null) {
          try {
             GUIUtils.invokeAndWait(new Runnable() {
 
                @Override
                public void run() {
-                  startup(null);
+                  startup(null, avs);
                }
             });
          } catch (InterruptedException ex) {
@@ -2142,6 +2144,10 @@ public class VirtualAcquisitionDisplay implements
       }
       hyperImage_.show();
       hyperImage_.getWindow().toFront();
+   }
+   
+   public void show() {
+      show(null);
    }
 
    public int getNumChannels() {

@@ -67,6 +67,7 @@
 #define ERR_INVALID_SNAPIMAGEDELAY 116
 
 class AcqSequenceThread;
+class SpuriousNoiseFilterControl;
  
 //////////////////////////////////////////////////////////////////////////////
 // Implementation of the MMDevice and MMCamera interfaces
@@ -75,6 +76,7 @@ class AndorCamera : public CCameraBase<AndorCamera>
 {
 public:
    friend class AcqSequenceThread;
+   friend class SpuriousNoiseFilterControl;
    static AndorCamera* GetInstance();
 
    ~AndorCamera();
@@ -121,6 +123,10 @@ public:
    int StopSequenceAcquisition(); // temporary=true 
    int StopSequenceAcquisition(bool temporary);
 
+   void PrepareToApplySetting();
+   void ResumeAfterApplySetting();
+
+
    bool IsCapturing(){return sequenceRunning_;};
 
    // action interface for the camera
@@ -165,9 +171,7 @@ public:
    int OnTimeOut(MM::PropertyBase* pProp, MM::ActionType eAct);  // kdb July-30-2009
    int OnCountConvert(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnCountConvertWavelength(MM::PropertyBase* pProp, MM::ActionType eAct);
-   int OnSpuriousNoiseFilter(MM::PropertyBase* pProp, MM::ActionType eAct);
-   int OnSpuriousNoiseFilterThreshold(MM::PropertyBase* pProp, MM::ActionType eAct);
-   int OnSpuriousNoiseFilterDescription(MM::PropertyBase* pProp, MM::ActionType eAct);
+
    int OnOptAcquireMode(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnROI(MM::PropertyBase* pProp, MM::ActionType eAct);
    void UpdateOAParams(const char*  OAModeName);
@@ -178,6 +182,9 @@ public:
    int PushImage();
 
    //static void ReleaseInstance(AndorCamera * AndorCamera);
+
+    int AddProperty(const char* name, const char* value, MM::PropertyType eType, 
+                   bool readOnly, MM::ActionFunctor* pAct);
 
     int GetNumberOfWorkableCameras() const { return NumberOfWorkableCameras_; } 
     int GetMyCameraID() const { return myCameraID_; } 
@@ -193,8 +200,8 @@ private:
    bool IsAcquiring();
 
    void LogStatus();
-	int PrepareSnap();
-	unsigned int UpdateSnapTriggerMode();
+   int PrepareSnap();
+   unsigned int UpdateSnapTriggerMode();
    std::string GetTriggerModeString(int mode);
    unsigned int ApplyTriggerMode(int mode);
    int GetTriggerModeInt(std::string mode);
@@ -217,9 +224,7 @@ private:
    double intervalMs_;
    std::string countConvertMode_;
    double countConvertWavelength_;
-   std::string spuriousNoiseFilter_;
-   double spuriousNoiseFilterThreshold_;
-   std::string spuriousNoiseFilterDescriptionStr_;
+
    std::string optAcquireModeStr_;
    std::string optAcquireDescriptionStr_;
 
@@ -245,6 +250,10 @@ private:
 
    unsigned int UpdateTimings();
    unsigned int ApplyShutterSettings();
+
+   enum STATE { PREPAREDFORSINGLESNAP, SEQUENCEACQUISITION };
+   STATE stateBeforePause_;
+   int RestartSequenceAcquisition();
 
 #ifdef __linux__
    HDEVMODULE hAndorDll; 
@@ -374,6 +383,7 @@ private:
 
    bool sequencePaused_;
 
+   SpuriousNoiseFilterControl* spuriousNoiseFilterControl_;
 };
 
 

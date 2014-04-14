@@ -22,7 +22,7 @@
 package org.micromanager.asidispim;
 
 import org.micromanager.utils.ReportingUtils;
-import org.micromanager.MMStudioMainFrame;
+//import org.micromanager.MMStudioMainFrame;
 import org.micromanager.asidispim.Data.Devices;
 import org.micromanager.asidispim.Data.Properties;
 import org.micromanager.asidispim.Utils.ListeningJPanel;
@@ -41,6 +41,7 @@ import javax.swing.JSeparator;
 import mmcorej.CMMCore;
 import mmcorej.StrVector;
 import net.miginfocom.swing.MigLayout;
+import org.micromanager.api.ScriptInterface;
 
 
 /**
@@ -72,7 +73,7 @@ public class DevicesPanel extends ListeningJPanel {
     * @param gui - hook to MMstudioMainFrame script interface
     * @param devices - instance of class that holds information about devices
     */
-   public DevicesPanel(Devices devices, Properties props) {
+   public DevicesPanel(ScriptInterface gui, Devices devices, Properties props) {
       super("Devices", 
             new MigLayout(
               "",
@@ -80,7 +81,7 @@ public class DevicesPanel extends ListeningJPanel {
               "[]16[]"));
       devices_ = devices;
       props_ = props;
-      core_ = MMStudioMainFrame.getInstance().getCore();
+      core_ = gui.getMMCore();
       
       // turn off listeners while we build the panel
       devices_.enableListeners(false);
@@ -246,14 +247,28 @@ public class DevicesPanel extends ListeningJPanel {
    private JComboBox makeDeviceSelectionBox(mmcorej.DeviceType deviceType, Devices.Keys deviceKey) {
       
       // class DeviceBoxListener used to be here as nested class
-      
-      StrVector strvDevices =  MMStudioMainFrame.getInstance().getMMCore().getLoadedDevicesOfType(deviceType);
-      ArrayList<String> devices = new ArrayList<String>(Arrays.asList(strvDevices.toArray()));
-      devices.add(0, "");
-      JComboBox deviceBox = new JComboBox(devices.toArray());
+      JComboBox deviceBox = new JComboBox();
+      updateDeviceSelectionBox(deviceBox, deviceType, deviceKey);
       deviceBox.addActionListener(new DeviceBoxListener(deviceKey, deviceBox));
       deviceBox.setSelectedItem(devices_.getMMDevice(deviceKey));  // selects whatever device was read in by prefs
       return deviceBox;
+   }
+   
+   /**
+    * Updates the items in a JCombobox with the currently available devices
+    * of the given type 
+    * @param deviceBox - JCombox that should exist
+    * @param deviceType - Micro-Manager device type (mmcorej.DeviceType)
+    * @param deviceKey  - ASI disPIM device type (see Devices class)
+    */
+   private void updateDeviceSelectionBox(JComboBox deviceBox, mmcorej.DeviceType deviceType, Devices.Keys deviceKey) {
+      StrVector strvDevices =  core_.getLoadedDevicesOfType(deviceType);
+      ArrayList<String> devices = new ArrayList<String>(Arrays.asList(strvDevices.toArray()));
+      devices.add(0, "");
+      deviceBox.removeAllItems();
+      for (String device : devices) {
+         deviceBox.addItem(device);
+      }
    }
    
    /**

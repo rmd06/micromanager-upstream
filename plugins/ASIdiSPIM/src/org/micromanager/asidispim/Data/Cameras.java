@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 
-import org.micromanager.MMStudioMainFrame;
 import org.micromanager.api.ScriptInterface;
 import org.micromanager.utils.ReportingUtils;
 
@@ -42,14 +41,15 @@ public class Cameras {
    private Devices.Keys currentCameraKey_;
    
    public static enum TriggerModes {
-      EXTERNAL,
+      EXTERNAL_START,
+      EXTERNAL_BULB,
       INTERNAL;
    }
    
-   public Cameras(Devices devices, Properties props) {
+   public Cameras(ScriptInterface gui, Devices devices, Properties props) {
       devices_ = devices;
       props_ = props;
-      gui_ = MMStudioMainFrame.getInstance();
+      gui_ = gui;
    }//constructor
    
    /**
@@ -185,21 +185,21 @@ public class Cameras {
       switch (camLibrary) {
       case HAMCAM:
          props_.setPropValue(devKey, Properties.Keys.TRIGGER_SOURCE, 
-               ((mode == TriggerModes.EXTERNAL) ? 
+               ((mode == TriggerModes.EXTERNAL_START) ? 
                      Properties.Values.EXTERNAL : 
                      Properties.Values.INTERNAL),
                true);
          break;
       case PCOCAM:
          props_.setPropValue(devKey, Properties.Keys.TRIGGER_MODE, 
-               ((mode == TriggerModes.EXTERNAL) ? 
+               ((mode == TriggerModes.EXTERNAL_START) ? 
                      Properties.Values.EXTERNAL_LC : 
                      Properties.Values.INTERNAL_LC),
                true);
          break;
       case ANDORCAM:
          props_.setPropValue(devKey, Properties.Keys.TRIGGER_MODE_ANDOR, 
-               ((mode == TriggerModes.EXTERNAL) ? 
+               ((mode == TriggerModes.EXTERNAL_START) ? 
                      Properties.Values.EXTERNAL_LC :
                      Properties.Values.INTERNAL_ANDOR),
                true);

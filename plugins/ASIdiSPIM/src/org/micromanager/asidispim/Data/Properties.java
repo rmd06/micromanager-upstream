@@ -28,10 +28,9 @@ import java.util.List;
 
 import mmcorej.CMMCore;
 
-import org.micromanager.MMStudioMainFrame;
+import org.micromanager.api.ScriptInterface;
 import org.micromanager.asidispim.Utils.UpdateFromPropertyListenerInterface;
 import org.micromanager.utils.NumberUtils;
-import org.micromanager.utils.ReportingUtils;
 
 
 /**
@@ -47,10 +46,19 @@ import org.micromanager.utils.ReportingUtils;
  * @author nico
  */
 public class Properties {
-
+   
+   private ScriptInterface gui_;
+   private Devices devices_;
+   private CMMCore core_;
+   private List<UpdateFromPropertyListenerInterface> listeners_;
+   private HashMap<Keys, Float> pluginFloats_;
+   private HashMap<Keys, Integer> pluginInts_;
+   private HashMap<Keys, String> pluginStrings_;
+   
    /**
-    * List of all device adapter properties used.  The enum value (all caps) is used in the Java code.  The corresponding
-    * string value (in quotes) is the value used by the device adapter.
+    * List of all device adapter properties used.  The enum value (all caps) 
+    * is used in the Java code.  The corresponding string value (in quotes) is 
+    * the value used by the device adapter.
     */
    public static enum Keys {
       JOYSTICK_ENABLED("JoystickEnabled"),
@@ -63,7 +71,11 @@ public class Properties {
       SPIM_NUM_SCANSPERSLICE("SPIMNumScansPerSlice"),
       SPIM_LINESCAN_PERIOD("SingleAxisXPeriod(ms)"),
       SPIM_DELAY_SIDE("SPIMDelayBeforeSide(ms)"),
-      SPIM_DELAY_SLICE("SPIMDelayBeforeSlice(ms)"),
+      SPIM_DELAY_SCAN("SPIMDelayBeforeScan(ms)"),
+      SPIM_DELAY_LASER("SPIMDelayBeforeLaser(ms)"),
+      SPIM_DURATION_LASER("SPIMLaserDuration(ms)"),
+      SPIM_DELAY_CAMERA("SPIMDelayBeforeCamera(ms)"),
+      SPIM_DURATION_CAMERA("SPIMCameraDuration(ms)"),
       SPIM_FIRSTSIDE("SPIMFirstSide"),
       SPIM_STATE("SPIMState"),
       SA_AMPLITUDE("SingleAxisAmplitude(um)"),
@@ -76,6 +88,8 @@ public class Properties {
       SA_AMPLITUDE_Y_DEG("SingleAxisYAmplitude(deg)"),
       SA_OFFSET_Y_DEG("SingleAxisYOffset(deg)"),
       SA_OFFSET_Y("SingleAxisYOffset(um)"),
+      SCANNER_FILTER_X("FilterFreqX(kHz)"),
+      SCANNER_FILTER_Y("FilterFreqY(kHz)"),
       AXIS_LETTER("AxisLetter"),
       SERIAL_ONLY_ON_CHANGE("OnlySendSerialCommandOnChange"),
       SERIAL_COMMAND("SerialCommand"),
@@ -92,6 +106,10 @@ public class Properties {
       PLUGIN_POSITION_REFRESH_INTERVAL("PositionRefreshInterval(s)"),
       PLUGIN_NUM_ACQUISITIONS("NumberOfAcquisitions"),
       PLUGIN_ACQUISITION_INTERVAL("AcquisitionPeriod"),
+      PLUGIN_DIRECTORY_ROOT("DirectoryRoot"),
+      PLUGIN_NAME_PREFIX("NamePrefix"),
+      PLUGIN_SAVE_WHILE_ACQUIRING("SaveWhileAcquiring"),
+      PLUGIN_SEPARATE_VIEWERS_FOR_TIMEPOINTS("SeparateViewersForTimePoints")
       ;
       private final String text;
       Keys(String text) {
@@ -136,21 +154,16 @@ public class Properties {
       }
    }
    
-   // variables
-   private Devices devices_;
-   private CMMCore core_;
-   private List<UpdateFromPropertyListenerInterface> listeners_;
-   private HashMap<Keys, Float> pluginFloats_;
-   private HashMap<Keys, Integer> pluginInts_;
-   private HashMap<Keys, String> pluginStrings_;
+  
    
    /**
     * Constructor.
     * @param devices
     * @author Jon
     */
-   public Properties (Devices devices) {
-      core_ = MMStudioMainFrame.getInstance().getCore();
+   public Properties (ScriptInterface gui, Devices devices) {
+      gui_ = gui;
+      core_ = gui_.getMMCore();
       devices_ = devices;
       listeners_ = new ArrayList<UpdateFromPropertyListenerInterface>();
       
@@ -173,19 +186,24 @@ public class Properties {
                || pluginInts_.containsKey(name);
       } else {
          String mmDevice = null;
-         try {
-            if (ignoreError) {
+         if (ignoreError) {
+            try {
                mmDevice = devices_.getMMDevice(device);
                return ((mmDevice!=null) &&  core_.hasProperty(mmDevice, name.toString()));
-            } else {
+            } catch (Exception ex){
+               // do nothing
+            }
+         } else {
+            try {
                mmDevice = devices_.getMMDeviceException(device);
                return core_.hasProperty(mmDevice, name.toString());
+            } catch (Exception ex) {
+               gui_.showError(ex, "Couldn't find property " + 
+                     name.toString() + " in device " + mmDevice);
             }
-         } catch (Exception ex) {
-            ReportingUtils.showError("Couldn't find property "+ name.toString() + " in device " + mmDevice);
          }
+         return false;
       }
-      return false;
    }
    
    /**
@@ -210,18 +228,25 @@ public class Properties {
          pluginStrings_.put(name, strVal);
       } else {
          String mmDevice = null;
-         try {
-            if (ignoreError) {
-               mmDevice = devices_.getMMDevice(device);
-               if (mmDevice != null) {
+         if (ignoreError) {
+            mmDevice = devices_.getMMDevice(device);
+            if (mmDevice != null) {
+               try {
                   core_.setProperty(mmDevice, name.toString(), strVal);
+               } catch (Exception ex) {
+                  // log to file but nothing else
+                  gui_.logMessage("Device " + mmDevice + 
+                        " does not have property: " + name.toString());
                }
-            } else { 
+            }
+         } else {
+            try {
                mmDevice = devices_.getMMDeviceException(device);
                core_.setProperty(mmDevice, name.toString(), strVal);
+            } catch (Exception ex) {
+               gui_.showError(ex, "Error setting string property " + 
+                    name.toString() + " to " + strVal + " in device " + mmDevice);
             }
-         } catch (Exception ex) {
-            ReportingUtils.showError("Error setting string property "+ name.toString() + " to " + strVal + " in device " + mmDevice);
          }
       }
    }
@@ -238,18 +263,24 @@ public class Properties {
          pluginStrings_.put(name, val.toString());
       } else {
          String mmDevice = null;
-         try {
-            if (ignoreError) {
-               mmDevice = devices_.getMMDevice(device);
-               if (mmDevice != null) {
+         if (ignoreError) {
+            mmDevice = devices_.getMMDevice(device);
+            if (mmDevice != null) {
+               try {
                   core_.setProperty(mmDevice, name.toString(), val.toString());
+               } catch (Exception ex) {
+                  // do nothing
                }
-            } else { 
+            }
+         } else {
+            try {
                mmDevice = devices_.getMMDeviceException(device);
                core_.setProperty(mmDevice, name.toString(), val.toString());
+            } catch (Exception ex) {
+               gui_.showError(ex, "Error setting string property " + 
+                    name.toString() + " to " + val.toString() + " in device " + 
+                    mmDevice);
             }
-         } catch (Exception ex) {
-            ReportingUtils.showError("Error setting string property "+ name.toString() + " to " + val.toString() + " in device " + mmDevice);
          }
       }
    }
@@ -286,18 +317,23 @@ public class Properties {
          pluginInts_.put(name, (Integer)intVal);
       } else {
          String mmDevice = null;
-         try {
-            if (ignoreError) {
-               mmDevice = devices_.getMMDevice(device);
-               if (mmDevice != null) {
+         if (ignoreError) {
+            mmDevice = devices_.getMMDevice(device);
+            if (mmDevice != null) {
+               try {
                   core_.setProperty(mmDevice, name.toString(), intVal);
+               } catch (Exception ex) {
+                  // do nothing
                }
-            } else {
+            }
+         } else {
+            try {
                mmDevice = devices_.getMMDeviceException(device);
                core_.setProperty(mmDevice, name.toString(), intVal);
+            } catch (Exception ex) {
+               gui_.showError(ex, "Error setting int property " + 
+                    name.toString() + " in device " + mmDevice);
             }
-         } catch (Exception ex) {
-            ReportingUtils.showError("Error setting int property " + name.toString() + " in device " + mmDevice);
          }
       }
    }
@@ -324,18 +360,23 @@ public class Properties {
          pluginFloats_.put(name, (Float)floatVal);
       } else {
          String mmDevice = null;
-         try {
-            if (ignoreError) {
-               mmDevice = devices_.getMMDevice(device);
-               if (mmDevice != null) {
+         if (ignoreError) {
+            mmDevice = devices_.getMMDevice(device);
+            if (mmDevice != null) {
+               try {
                   core_.setProperty(mmDevice, name.toString(), floatVal);
+               } catch (Exception ex) {
+                  // do nothing
                }
-            } else {
+            }
+         } else {
+            try {
                mmDevice = devices_.getMMDeviceException(device);
                core_.setProperty(mmDevice, name.toString(), floatVal);
+            } catch (Exception ex) {
+               gui_.showError(ex, "Error setting float property " + 
+                    name.toString() + " in device " + mmDevice);
             }
-         } catch (Exception ex) {
-            ReportingUtils.showError("Error setting float property " + name.toString() + " in device " + mmDevice);
          }
       }
    }
@@ -380,7 +421,8 @@ public class Properties {
                mmDevice = devices_.getMMDeviceException(device);
                val = core_.getProperty(mmDevice, name.toString());
             } catch (Exception ex) {
-               ReportingUtils.showError("Could not get property " + name.toString() + " from device " + mmDevice);
+               gui_.showError(ex, "Could not get property " + 
+                       name.toString() + " from device " + mmDevice);
             }
          }
       }
@@ -449,9 +491,11 @@ public class Properties {
                val = NumberUtils.coreStringToInt(strVal);
             }
          } catch (ParseException ex) {
-            ReportingUtils.showError("Could not parse int value of " + strVal + " for " + name.toString() + " in device " + device.toString());
+            gui_.showError(ex, "Could not parse int value of " + 
+                    strVal + " for " + name.toString() + " in device " + 
+                    device.toString());
          } catch (NullPointerException ex) {
-            ReportingUtils.showError("Null Pointer error in function getPropValueInteger");
+            gui_.showError(ex, "Null Pointer error in function getPropValueInteger");
          }
       }
       return val;
@@ -490,14 +534,16 @@ public class Properties {
               val = (float)NumberUtils.coreStringToDouble(strVal);
            }
         } catch (ParseException ex) {
-           ReportingUtils.showError("Could not parse int value of " + strVal + " for " + name.toString() + " in device " + device.toString());
+           gui_.showError(ex, "Could not parse int value of " + 
+                   strVal + " for " + name.toString() + " in device " + 
+                   device.toString());
         } catch (NullPointerException ex) {
-           ReportingUtils.showError("Null Pointer error in function getPropValueFLoat");
+           gui_.showError(ex, "Null Pointer error in function getPropValueFLoat");
         }
      }
      return val;
   }
-  
+ 
   
   /**
    * Used to add classes implementing DeviceListenerInterface as listeners

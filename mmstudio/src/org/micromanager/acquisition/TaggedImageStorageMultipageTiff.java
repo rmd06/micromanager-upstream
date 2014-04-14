@@ -44,7 +44,6 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
    private String directory_;
    private Thread shutdownHook_;
    private int numPositions_;
-   private CachedImages cached_;
    final public boolean omeTiff_;
    final private boolean separateMetadataFile_;
    private boolean splitByXYPosition_ = true;
@@ -86,7 +85,6 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
       newDataSet_ = newDataSet;
       directory_ = dir;
       tiffReadersByLabel_ = new TreeMap<String, MultipageTiffReader>(new ImageLabelComparator());
-      cached_ = new CachedImages();
       setSummaryMetadata(summaryMetadata);
 
       // TODO: throw error if no existing dataset
@@ -106,7 +104,11 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
    }
    
    private void processSummaryMD() {
-      displayAndComments_ = VirtualAcquisitionDisplay.getDisplaySettingsFromSummary(summaryMetadata_);
+      try {
+         displayAndComments_ = VirtualAcquisitionDisplay.getDisplaySettingsFromSummary(summaryMetadata_);    
+      } catch (Exception ex) {
+         ReportingUtils.logError(ex, "Problems setting displaySettings from Summery");
+      }
       try {
          numPositions_ = MDUtils.getNumPositions(summaryMetadata_);
          if (numPositions_ <= 0) {
@@ -193,17 +195,13 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
    @Override
    public TaggedImage getImage(int channelIndex, int sliceIndex, int frameIndex, int positionIndex) {
       String label = MDUtils.generateLabel(channelIndex, sliceIndex, frameIndex, positionIndex);
-      TaggedImage img = cached_.get(label);
-      if (img != null) {
-         return img;
-      }
       if (!tiffReadersByLabel_.containsKey(label)) {
          return null;
       }
 
       //DEbugging code for a strange exception found in core log
       try {
-         img = tiffReadersByLabel_.get(label).readImage(label);
+         return tiffReadersByLabel_.get(label).readImage(label);
       } catch (NullPointerException e) {
          ReportingUtils.logError("Couldn't find image that TiffReader is supposed to contain");
          if (tiffReadersByLabel_ == null) {
@@ -213,22 +211,27 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
             ReportingUtils.logError("Specific reader is null " + label);
          }
       }
-      return img;
+      return null;
    }
 
    @Override
    public JSONObject getImageTags(int channelIndex, int sliceIndex, int frameIndex, int positionIndex) {
       String label = MDUtils.generateLabel(channelIndex, sliceIndex, frameIndex, positionIndex);
-      TaggedImage img = cached_.get(label);
-      if (img != null) {
-         return img.tags;
-      }
       if (!tiffReadersByLabel_.containsKey(label)) {
          return null;
       }
       return tiffReadersByLabel_.get(label).readImage(label).tags;   
    }
 
+   /*
+    * Method that allows overwrting of pixels but not MD or TIFF tags
+    * so that low res stitched images can be written tile by tile
+    */
+   public void overwritePixels(Object pix, int channel, int slice, int frame) throws IOException {
+      //asumes only one position
+      fileSets_.get(0).overwritePixels(pix, channel, slice, frame); 
+   }
+   
    @Override
    public void putImage(TaggedImage taggedImage) throws MMException {
       if (!newDataSet_) {
@@ -276,7 +279,6 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
          frame = 0;
       }
       lastFrameOpenedDataSet_ = Math.max(frame, lastFrameOpenedDataSet_);
-      cached_.add(taggedImage, label);
    }
 
    @Override
@@ -331,9 +333,9 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
    private void setSummaryMetadata(JSONObject md, boolean showProgress) {
       summaryMetadata_ = md;
       if (summaryMetadata_ != null) {
-         try {
-            boolean slicesFirst = summaryMetadata_.getBoolean("SlicesFirst");
-            boolean timeFirst = summaryMetadata_.getBoolean("TimeFirst");
+         // try {
+            boolean slicesFirst = summaryMetadata_.optBoolean("SlicesFirst", true);
+            boolean timeFirst = summaryMetadata_.optBoolean("TimeFirst", false);
             TreeMap<String, MultipageTiffReader> oldImageMap = tiffReadersByLabel_;
             tiffReadersByLabel_ = new TreeMap<String, MultipageTiffReader>(new ImageLabelComparator(slicesFirst, timeFirst));
             if (showProgress) {
@@ -350,9 +352,9 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
             } else {
                tiffReadersByLabel_.putAll(oldImageMap);
             }
-         } catch (JSONException ex) {
-            ReportingUtils.logError("Couldn't find SlicesFirst or TimeFirst in summary metadata");
-         }
+        //  } catch (JSONException ex) {
+        //    ReportingUtils.logError(ex, "Couldn't find SlicesFirst or TimeFirst in summary metadata");
+        //  }
          if (summaryMetadata_ != null && summaryMetadata_.length() > 0) {
             processSummaryMD();
          }
@@ -511,6 +513,14 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
 
       public MultipageTiffReader getCurrentReader() {
          return tiffWriters_.getLast().getReader();
+      }
+      
+      public void overwritePixels(Object pixels, int channel, int slice, int frame) throws IOException {
+         for (MultipageTiffWriter w : tiffWriters_) {
+            if (w.getIndexMap().containsKey(MDUtils.generateLabel(channel, slice, frame, 0))) {
+               w.overwritePixels(pixels, channel, slice, frame);
+            }
+         }
       }
       
       public void writeImage(TaggedImage img) throws IOException {
@@ -759,33 +769,5 @@ public final class TaggedImageStorageMultipageTiff implements TaggedImageStorage
          }
       }
  
-   }
-   
-   private class CachedImages {
-      private static final int NUM_TO_CACHE = 10;
-      
-      private LinkedList<TaggedImage> images;
-      private LinkedList<String> labels;
-      
-      public CachedImages() {
-         images = new LinkedList<TaggedImage>();
-         labels = new LinkedList<String>();
-      }
-      
-      public void add(TaggedImage img, String label) {
-         images.addFirst(img);
-         labels.addFirst(label);
-         while (images.size() > NUM_TO_CACHE) {
-            images.removeLast();
-            labels.removeLast();
-         }
-      }
-
-      public TaggedImage get(String label) {
-         int i = labels.indexOf(label);
-         return i == -1 ? null : images.get(i);
-      }
-      
-   }
-    
+   }    
 }
