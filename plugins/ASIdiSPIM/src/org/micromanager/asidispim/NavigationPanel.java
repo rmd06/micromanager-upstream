@@ -38,15 +38,11 @@ import org.micromanager.asidispim.Utils.PanelUtils;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
-import javax.swing.JCheckBox;
 
 import mmcorej.CMMCore;
 import net.miginfocom.swing.MigLayout;
 import org.micromanager.api.ScriptInterface;
-
-import org.micromanager.asidispim.Utils.StagePositionUpdater;
 import org.micromanager.internalinterfaces.LiveModeListener;
-//import org.micromanager.utils.ReportingUtils;
 
 
 /**
@@ -69,7 +65,6 @@ public class NavigationPanel extends ListeningJPanel implements LiveModeListener
    private final CameraSubPanel cameraPanel_;
    private final BeamSubPanel beamPanel_;
    
-   public final StagePositionUpdater stagePosUpdater_;
    
    private JLabel xPositionLabel_;
    private JLabel yPositionLabel_;
@@ -86,8 +81,7 @@ public class NavigationPanel extends ListeningJPanel implements LiveModeListener
     * Navigation panel constructor.
     */
    public NavigationPanel(ScriptInterface gui, Devices devices, Properties props, 
-           Joystick joystick, Positions positions, 
-           StagePositionUpdater stagePosUpdater, Prefs prefs, Cameras cameras) {    
+           Joystick joystick, Positions positions, Prefs prefs, Cameras cameras) {    
       super ("Navigation",
             new MigLayout(
               "", 
@@ -97,12 +91,11 @@ public class NavigationPanel extends ListeningJPanel implements LiveModeListener
       props_ = props;
       joystick_ = joystick;
       positions_ = positions;
-      stagePosUpdater_ = stagePosUpdater;
       prefs_ = prefs;
       cameras_ = cameras;
       gui_ = gui;
       core_ = gui_.getMMCore();
-      PanelUtils pu = new PanelUtils();
+      PanelUtils pu = new PanelUtils(gui_);
       
       joystickPanel_ = new JoystickSubPanel(joystick_, devices_, panelName_, Devices.Sides.NONE, prefs_);
       add(joystickPanel_, "span 2 4");  // make artificially tall to keep stage positions in line with each other
@@ -192,26 +185,7 @@ public class NavigationPanel extends ListeningJPanel implements LiveModeListener
       add(makeIncrementButton(Devices.Keys.GALVOB, Joystick.Directions.X, 0.2, "+"));
       add(makeMoveToOriginButton(Devices.Keys.GALVOB, Joystick.Directions.X), "wrap");
       
-      final JCheckBox activeTimerCheckBox = new JCheckBox("Update positions continually");
-      ActionListener ae = new ActionListener() {
-         public void actionPerformed(ActionEvent e) { 
-            if (activeTimerCheckBox.isSelected()) {
-               stagePosUpdater_.start();
-            } else {
-               stagePosUpdater_.stop();
-            }
-            prefs_.putBoolean(panelName_, Prefs.Keys.ENABLE_POSITION_UPDATES, activeTimerCheckBox.isSelected());
-         }
-      }; 
-      activeTimerCheckBox.addActionListener(ae);
-      activeTimerCheckBox.setSelected(prefs_.getBoolean(panelName_, Prefs.Keys.ENABLE_POSITION_UPDATES, true));
-      // programmatically click twice to make sure the action handler is called;
-      //   it is not called by setSelected unless there is a change in the value
-      activeTimerCheckBox.doClick();
-      activeTimerCheckBox.doClick();
-      add(activeTimerCheckBox, "center, span 2");
-      
-      add(new JLabel(devices_.getDeviceDisplayVerbose(Devices.Keys.GALVOB, Joystick.Directions.Y) + ":"));
+      add(new JLabel(devices_.getDeviceDisplayVerbose(Devices.Keys.GALVOB, Joystick.Directions.Y) + ":"), "skip 2");
       galvoByPositionLabel_ = new JLabel("");
       add(galvoByPositionLabel_);
       add(pu.makeSetPositionField(Devices.Keys.GALVOB, Joystick.Directions.Y, positions_));

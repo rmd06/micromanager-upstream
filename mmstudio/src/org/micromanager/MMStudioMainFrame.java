@@ -202,11 +202,11 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
            = Collections.synchronizedList(new ArrayList<Component>());
    private AutofocusManager afMgr_;
    private final static String DEFAULT_CONFIG_FILE_NAME = "MMConfig_demo.cfg";
+   private final static String DEFAULT_CONFIG_FILE_PROPERTY = "org.micromanager.default.config.file";
    private ArrayList<String> MRUConfigFiles_;
    private static final int maxMRUCfgs_ = 5;
    private String sysConfigFile_;
    private String startupScriptFile_;
-   private String sysStateFile_ = "MMSystemState.cfg";
    private ConfigGroupPad configPad_;
    private LiveModeTimer liveModeTimer_;
    private GraphData lineProfileData_;
@@ -341,12 +341,12 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
 
       acqMgr_ = new AcquisitionManager();
       
-      sysConfigFile_ = System.getProperty("user.dir") + "/"
-            + DEFAULT_CONFIG_FILE_NAME;
+      sysConfigFile_ = new File(DEFAULT_CONFIG_FILE_NAME).getAbsolutePath();
+      sysConfigFile_ = System.getProperty(DEFAULT_CONFIG_FILE_PROPERTY,
+            sysConfigFile_);
 
       if (options_.startupScript_.length() > 0) {
-         startupScriptFile_ = System.getProperty("user.dir") + "/"
-                 + options_.startupScript_;
+         startupScriptFile_ = new File(options_.startupScript_).getAbsolutePath();
       } else {
          startupScriptFile_ = "";
       }
@@ -2316,6 +2316,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
     * Implements ScriptInterface
     */
    @Override
+   @Deprecated
    public AcqControlDlg getAcqDlg() {
       return acqControlWin_;
    }
@@ -2325,6 +2326,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
     * Implements ScriptInterface
     */
    @Override
+   @Deprecated
    public PositionListDlg getXYPosListDlg() {
       checkPosListDlg();
       return posListDlg_;
@@ -2688,9 +2690,8 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
     * @param plugin_ - plugin_ to be added to the menu
     */
    public void addPluginToMenu(final PluginLoader.PluginItem plugin) {
-               
-      String[] path = plugin.getDirectory().split(Pattern.quote(File.separator));
-      if (path.length == 1) {
+      List<String> path = plugin.getMenuPath();
+      if (path.size() == 1) {
          GUIUtils.addMenuItem(pluginMenu_, plugin.getMenuItem(), plugin.getTooltip(),
                  new Runnable() {
             public void run() {
@@ -2700,14 +2701,15 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
             }
          });
       }
-      if (path.length == 2) {
+      if (path.size() == 2) {
          if (pluginSubMenus_ == null) {
             pluginSubMenus_ = new HashMap<String, JMenu>();
          }
-         JMenu submenu = pluginSubMenus_.get(path[1]);
+         String groupName = path.get(0);
+         JMenu submenu = pluginSubMenus_.get(groupName);
          if (submenu == null) {
-            submenu = new JMenu(path[1]);
-            pluginSubMenus_.put(path[1], submenu);
+            submenu = new JMenu(groupName);
+            pluginSubMenus_.put(groupName, submenu);
             submenu.validate();
             pluginMenu_.add(submenu);
          }
@@ -2719,7 +2721,6 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
                plugin.getMMPlugin().show();
             }
          });
-
       }
       
       pluginMenu_.validate();
@@ -3657,6 +3658,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    }
    
    @Override
+   @Deprecated
    public String createAcquisition(JSONObject summaryMetadata, boolean diskCached, boolean displayOff) {
       return acqMgr_.createAcquisition(summaryMetadata, diskCached, engine_, displayOff);
    }
@@ -4049,6 +4051,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    }
    
    @Override
+   @Deprecated
    public MMAcquisition getAcquisition(String name) throws MMScriptException {
       return acqMgr_.getAcquisition(name);
    }
@@ -4275,13 +4278,24 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    
    @Override
    public void addImageProcessor(DataProcessor<TaggedImage> processor) {
-      System.out.println("Processor: "+processor.getClass().getSimpleName());
-	   getAcquisitionEngine().addImageProcessor(processor);
+      getAcquisitionEngine().addImageProcessor(processor);
    }
 
    @Override
    public void removeImageProcessor(DataProcessor<TaggedImage> processor) {
-	   getAcquisitionEngine().removeImageProcessor(processor);
+      getAcquisitionEngine().removeImageProcessor(processor);
+   }
+
+   // NB will need @Override tags once these functions are exposed in the 
+   // ScriptInterface.
+   public ArrayList<DataProcessor<TaggedImage>> getImageProcessorPipeline() {
+      return getAcquisitionEngine().getImageProcessorPipeline();
+   }
+
+   // NB will need @Override tags once these functions are exposed in the 
+   // ScriptInterface.
+   public void setImageProcessorPipeline(List<DataProcessor<TaggedImage>> pipeline) {
+      getAcquisitionEngine().setImageProcessorPipeline(pipeline);
    }
 
    @Override
@@ -4305,14 +4319,19 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    }
    
    @Override
-   public SequenceSettings getAcqusitionSettings() {
+   public SequenceSettings getAcquisitionSettings() {
 	   if (engine_ == null)
 		   return new SequenceSettings();
 	   return engine_.getSequenceSettings();
    }
+
+   // Deprecated; use correctly spelled version. (Used to be part of API.)
+   public SequenceSettings getAcqusitionSettings() {
+      return getAcquisitionSettings();
+   }
    
    @Override
-   public void setAcqusitionSettings(SequenceSettings ss) {
+   public void setAcquisitionSettings(SequenceSettings ss) {
       if (engine_ == null)
          return;
       
@@ -4320,6 +4339,10 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
       acqControlWin_.updateGUIContents();
    }
 
+   // Deprecated; use correctly spelled version. (Used to be part of API.)
+   public void setAcqusitionSettings(SequenceSettings ss) {
+      setAcquisitionSettings(ss);
+   }
    
    @Override
    public String getAcquisitionPath() {
@@ -4329,8 +4352,13 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    }
    
    @Override
+   public void promptToSaveAcquisition(String name, boolean prompt) throws MMScriptException {
+      getAcquisition(name).promptToSave(prompt);
+   }
+
+   // Deprecated; use correctly spelled version. (Used to be part of API.)
    public void promptToSaveAcqusition(String name, boolean prompt) throws MMScriptException {
-	   getAcquisition(name).promptToSave(prompt);
+      promptToSaveAcquisition(name, prompt);
    }
 
     @Override

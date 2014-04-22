@@ -38,10 +38,14 @@ public class NewImageFlippingProcessor extends DataProcessor<TaggedImage> {
 
       R0, R90, R180, R270
    }
-   NewImageFlipperControls controls_;
+   String camera_;
+   boolean isMirrored_;
+   Rotation rotation_;
 
-   public NewImageFlippingProcessor(NewImageFlipperControls controls) {
-      this.controls_ = controls;
+   public NewImageFlippingProcessor(String camera, boolean isMirrored, Rotation rotation) {
+      this.camera_ = camera;
+      this.isMirrored_ = isMirrored;
+      this.rotation_ = rotation;
    }
 
    /**
@@ -56,19 +60,19 @@ public class NewImageFlippingProcessor extends DataProcessor<TaggedImage> {
          if (nextImage != TaggedImageQueue.POISON) {
             try {
                String camera = nextImage.tags.getString("Core-Camera");
-               if (!camera.equals(controls_.getCamera())) {
+               if (!camera.equals(camera_)) {
                   if (nextImage.tags.has("Camera")) {
                      camera = nextImage.tags.getString("Camera");
                   }
                }
-               if (!camera.equals(controls_.getCamera())) {
+               if (!camera.equals(camera_)) {
                   produce(nextImage);
                   return;
 
                }
 
-               produce(proccessTaggedImage(nextImage, controls_.getMirror(),
-                       controls_.getRotate()));
+               produce(proccessTaggedImage(nextImage, isMirrored_,
+                       rotation_));
 
             } catch (Exception ex) {
                produce(nextImage);
@@ -149,4 +153,30 @@ public class NewImageFlippingProcessor extends DataProcessor<TaggedImage> {
 
       return new TaggedImage(proc.getPixels(), newTags);
    }
+
+   /**
+    * Update which camera is to be processed.
+    * @param camera - Camera name
+    */
+   public void setCamera(String camera) {
+      camera_ = camera;
+   }
+
+
+   /**
+    * Update the rotation parameter.
+    * @param rotation - Rotation (R0, R90, R180, R270)
+    */
+   public void setRotation(Rotation rotation) {
+      rotation_ = rotation;
+   }
+
+   /**
+    * Update the mirroring.
+    * @param isMirrored - true if image should be mirrored.
+    */
+   public void setIsMirrored(boolean isMirrored) {
+      isMirrored_ = isMirrored;
+   }
+  
 }

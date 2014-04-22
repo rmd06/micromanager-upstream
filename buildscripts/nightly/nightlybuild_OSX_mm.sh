@@ -2,6 +2,28 @@
 
 set -e
 
+usage() {
+   echo "Usage: $0 [-r] [-R | -v VERSION]" 1>&2
+   echo "   -r         -- incremental build (for testing only)" 1>&2
+   echo "   -D PATH    -- use dependencies at prefix PATH" 1>&2
+   echo "   -R         -- use release version string (no date)" 1>&2
+   echo "   -v VERSION -- set version string" 1>&2
+   exit 1
+}
+
+do_remake=no
+use_release_version=no
+while getopts ":rD:Rv:" o; do
+   case $o in
+      r) do_remake=yes ;;
+      D) MM_DEPS_PREFIX="$OPTARG" ;;
+      R) use_release_version=yes ;;
+      v) MM_VERSION="$OPTARG" ;;
+      *) usage ;;
+   esac
+done
+
+
 ##
 ## Setup
 ##
@@ -26,9 +48,30 @@ export SDKROOT=$MM_MACOSX_SDKROOT
 ## Build
 ##
 
-cd "$MM_SRCDIR"
+cd $MM_SRCDIR
+
+if [ -z "$MM_VERSION" ]; then
+   MM_VERSION="$(cat version.txt)"
+   [ "$use_release_version" = yes ] || MM_VERSION="$MM_VERSION-$(date +%Y%m%d)"
+fi
+sed -e "s/@VERSION_STRING@/$MM_VERSION/" buildscripts/MMVersion.java.in > mmstudio/src/org/micromanager/MMVersion.java || exit
+
+if [ "$do_remake" = yes ]; then
+buildscripts/nextgen-gnubuild/activate.py -r
+autoreconf -v
+else
 buildscripts/nextgen-gnubuild/activate.py -a
 sh autogen.sh
+fi
+
+# Note on Java variables.
+# JDK 1.6 from Apple and its development kit need to be installed. We could
+# conceivably use JDK 1.7 to cross-compile to 1.6, but that would still need
+# the 1.6 classpath and a -bootclasspath flag to javac.
+# To build with JDK 1.6 when /usr/bin/javac points to JDK 1.7, we need to set
+# JAVA_HOME. But this breaks the build because 1.6.0.jdk does not contain
+# (symlinks to) the JNI headers as whould be expected for a Java home. So we
+# explicitly set JNI_CPPFLAGS.
 
 # Note on OpenCV library flags.
 # Since OpenCV is a CMake project, it does not produce the convenient libtool
@@ -46,15 +89,12 @@ sh autogen.sh
 # It looks like both libusb-1.0 and libusb-compat fail to include IOKit and
 # CoreFoundation in their respective .la files.
 
-# TODO Add ImageJ
-# TODO Proper stage directory (stage/Release/OSX)
 # TODO Python: use Python.org version
 eval ./configure \
-   --prefix=$MM_BUILDDIR/mm \
-   --without-imagej \
+   --prefix=$MM_BUILDDIR/it-is-a-bug-if-files-go-in-here \
+   --disable-hardcoded-mmcorej-library-path \
    --with-boost=$MM_DEPS_PREFIX \
    --with-zlib=$MM_MACOSX_SDKROOT/usr \
-   --with-ltdl=$MM_DEPS_PREFIX \
    --with-libdc1394 \
    --with-libusb-0-1 \
    --with-hidapi \
@@ -63,6 +103,9 @@ eval ./configure \
    --with-freeimageplus \
    --with-python=/usr \
    $MM_CONFIGUREFLAGS \
+   "JAVA_HOME=\"/System/Library/Java/JavaVirtualMachines/1.6.0.jdk/Contents/Home\"" \
+   "JNI_CPPFLAGS=\"-I/System/Library/Frameworks/JavaVM.framework/Versions/A/Headers\"" \
+   "JAVACFLAGS=\"-Xlint:all,-serial -source 1.6 -target 1.6\"" \
    "OPENCV_LDFLAGS=\"-framework Cocoa -framework QTKit -framework QuartzCore -framework AppKit\"" \
    "OPENCV_LIBS=\"$MM_DEPS_PREFIX/lib/libopencv_highgui.a $MM_DEPS_PREFIX/lib/libopencv_imgproc.a $MM_DEPS_PREFIX/lib/libopencv_core.a -lz $MM_DEPS_PREFIX/lib/libdc1394.la\"" \
    PKG_CONFIG=$MM_DEPS_PREFIX/bin/pkg-config \
@@ -84,40 +127,70 @@ do
 done
 
 
-# TODO Fix install: modules should go to $PREFIX/lib/micro-manager ($pkglibdir); JARs should go to $IJPREFIX/plugins/Micro-Manager ($jardir?)
-# The default jardir should probably be $datadir/java/micro-manager
-make install
+##
+## Stage application
+##
+
+MM_JARDIR=$MM_STAGEDIR/plugins/Micro-Manager
+make install pkglibdir=$MM_STAGEDIR pkgdatadir=$MM_STAGEDIR jardir=$MM_JARDIR
+rm -f $MM_STAGEDIR/*.la
 
 
-# TODO
-# rm -f $MM_STAGEDIR/*.la
-
-# TODO Stage other files:
-
-# mkdir -p $MM_STAGEDIR/libgphoto2/libgphoto2
-# mkdir -p $MM_STAGEDIR/libgphoto2/libgphoto2_port
-# cp $MM_DEPS_PREFIX/lib/libgphoto2/2.5.2/*.so $MM_STAGEDIR/libgphoto2/libgphoto2
-# cp $MM_DEPS_PREFIX/lib/libgphoto2_port/0.10.0/*.so $MM_STAGEDIR/libgphoto2/libgphoto2_port
-#
-# buildscripts/nightly/mkportableapp_OSX/mkportableapp.py \
-#    --srcdir $MM_DEPS_PREFIX/lib \
-#    --destdir $MM_STAGEDIR \
-#    --forbid-from $MM_BUILDDIR/share \
-#    --forbid-from $MM_DEPS_PREFIX/src \
-#    --forbid-from $MM_DEPS_PREFIX/share \
-#    --forbid-from /usr/local \
-#    --map-path 'libltdl*.dylib:libgphoto2' \
-#    --map-path 'libgphoto2*.dylib:libgphoto2'
+# Stage other files
+cp -R $MM_SRCDIR/bindist/any-platform/* $MM_STAGEDIR/
+cp -R $MM_SRCDIR/bindist/MacOSX/* $MM_STAGEDIR/
 
 
-echo "Finished building Micro-Manager"
+# Stage the libgphoto2 dylibs.
+mkdir -p $MM_STAGEDIR/libgphoto2/libgphoto2
+mkdir -p $MM_STAGEDIR/libgphoto2/libgphoto2_port
+cp $MM_DEPS_PREFIX/lib/libgphoto2/2.5.2/*.so $MM_STAGEDIR/libgphoto2/libgphoto2
+cp $MM_DEPS_PREFIX/lib/libgphoto2_port/0.10.0/*.so $MM_STAGEDIR/libgphoto2/libgphoto2_port
+buildscripts/nightly/mkportableapp_OSX/mkportableapp.py \
+   --srcdir $MM_DEPS_PREFIX/lib \
+   --destdir $MM_STAGEDIR \
+   --forbid-from $MM_BUILDDIR/share \
+   --forbid-from $MM_DEPS_PREFIX/src \
+   --forbid-from $MM_DEPS_PREFIX/share \
+   --forbid-from /usr/local \
+   --map-path 'libltdl*.dylib:libgphoto2' \
+   --map-path 'libgphoto2*.dylib:libgphoto2'
 
 
-# TODO Put this in an appropriate place for testing; add tests for
-# non-device-adapter binaries (scan all Mach-O files)
-#for arch in i386 x86_64; do
-#   echo "Check $arch device adapters for suspicious undefined symbols..."
-#   for file in $MM_BUILDDIR/mm/lib/micro-manager/libmmgr_dal_*; do
-#      nm -muA -arch $arch $file | grep 'dynamically looked up' | c++filt
-#   done
-#done
+# Stage third-party JARs.
+cp $MM_SRCDIR/../3rdpartypublic/classext/*.jar $MM_JARDIR
+mv $MM_JARDIR/ij.jar $MM_STAGEDIR
+
+# Ensure no SVN data gets into the installer (e.g. when copying from bindist/)
+find $MM_STAGEDIR -name .svn -prune -exec rm -rf {} +
+
+
+##
+## Create disk image
+##
+
+cd $MM_BUILDDIR
+rm -f Micro-Manager.dmg Micro-Manager.sparseimage
+
+hdiutil convert $MM_SRCDIR/MacInstaller/Micro-Manager1.4.dmg -format UDSP -o Micro-Manager.sparseimage
+mkdir -p mm-mnt
+hdiutil attach Micro-Manager.sparseimage -mountpoint mm-mnt
+cp -R $MM_STAGEDIR/* mm-mnt/Micro-Manager1.4
+hdiutil detach mm-mnt
+rmdir mm-mnt
+hdiutil convert Micro-Manager.sparseimage -format UDBZ -o Micro-Manager$MM_VERSION.dmg
+
+
+##
+## Generate HTML API documentation
+##
+
+cd $MM_SRCDIR
+
+make dox
+pushd swig-doc-converter
+./convert
+popd
+pushd mmstudio
+make javadoc
+popd

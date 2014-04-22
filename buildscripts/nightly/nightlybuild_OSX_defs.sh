@@ -3,7 +3,8 @@
 # Common definitions for Micro-Manager OS X binary package build
 
 MM_BUILDDIR=`pwd`
-MM_DEPS_PREFIX="$MM_BUILDDIR/dependencies"
+[ -z "$MM_DEPS_PREFIX" ] && MM_DEPS_PREFIX="$MM_BUILDDIR/dependencies"
+MM_STAGEDIR="$MM_BUILDDIR/stage"
 
 # The correct minimum Mac OS X version is critical when building
 # backward-compatible binaries. Omitting this will produce binaries that will
@@ -29,7 +30,9 @@ MM_CXXCPP="clang++ -E"
 
 # These are set to strings containing shell syntax that should be expanded
 # before use.
-MM_CONFIGUREFLAGS_NOCPPLD="--prefix=\"\$MM_DEPS_PREFIX\" CC=\"\$MM_CC\" CXX=\"\$MM_CXX\" CPP=\"\$MM_CPP\" CXXCPP=\"\$MM_CXXCPP\" CFLAGS=\"\$MM_CFLAGS\" CXXFLAGS=\"\$MM_CXXFLAGS\""
+MM_CONFIGUREFLAGS_NOCPPLD="CC=\"\$MM_CC\" CXX=\"\$MM_CXX\" CPP=\"\$MM_CPP\" CXXCPP=\"\$MM_CXXCPP\" CFLAGS=\"\$MM_CFLAGS\" CXXFLAGS=\"\$MM_CXXFLAGS\""
 MM_CONFIGUREFLAGS="$MM_CONFIGUREFLAGS_NOCPPLD CPPFLAGS=\"\$MM_CPPFLAGS\" LDFLAGS=\"\$MM_LDFLAGS\""
+MM_DEPS_CONFIGUREFLAGS_NOCPPLD="--prefix=\"\$MM_DEPS_PREFIX\" $MM_CONFIGUREFLAGS_NOCPPLD"
+MM_DEPS_CONFIGUREFLAGS="--prefix=\"\$MM_DEPS_PREFIX\" $MM_CONFIGUREFLAGS"
 
 MM_PARALLELMAKEFLAG=-j8

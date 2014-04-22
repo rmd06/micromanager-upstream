@@ -100,13 +100,13 @@ public class ASIdiSPIMFrame extends javax.swing.JFrame
       setupPanelB_ = new SetupPanel(gui, devices_, props_, joystick_,
             Devices.Sides.B, positions_, cameras_, prefs_);
       // get initial positions, even if user doesn't want continual refresh
-      stagePosUpdater_ = new StagePositionUpdater(positions_, props_);  // needed for setup and navigation
+      stagePosUpdater_ = new StagePositionUpdater(gui, positions_, props_);  // needed for setup and navigation
       acquisitionPanel_ = new AcquisitionPanel(gui, devices_, props_, cameras_, 
               prefs_, stagePosUpdater_);
-      guiSettingsPanel_ = new GuiSettingsPanel(devices_, props_, prefs_, stagePosUpdater_);
+      guiSettingsPanel_ = new GuiSettingsPanel(gui, devices_, props_, prefs_, stagePosUpdater_);
       stagePosUpdater_.oneTimeUpdate();  // needed for NavigationPanel
       navigationPanel_ = new NavigationPanel(gui, devices_, props_, joystick_,
-            positions_, stagePosUpdater_, prefs_, cameras_);
+            positions_, prefs_, cameras_);
       helpPanel_ = new HelpPanel(gui);
       
       // now add tabs to GUI

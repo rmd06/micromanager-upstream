@@ -280,7 +280,7 @@ public class SplitViewFrame extends javax.swing.JFrame {
 
       gui_.openAcquisition(ACQNAME, "", 1, 2, 1, 1, true, false);
       gui_.initializeAcquisition(ACQNAME, newWidth_, newHeight_, (int) imgDepth_, 8 * (int)imgDepth_);
-      gui_.promptToSaveAcqusition(ACQNAME, false);
+      gui_.promptToSaveAcquisition(ACQNAME, false);
       gui_.setChannelColor(ACQNAME, 0, col1_);
       gui_.setChannelColor(ACQNAME, 1, col2_);
       if (orientation_.equals(LR)) {
@@ -561,8 +561,10 @@ public class SplitViewFrame extends javax.swing.JFrame {
          return;
       
       if (applyToMDACheckBox_.isSelected() && !appliedToMDA_) {
-         mmImageProcessor_ = new SplitViewProcessor(this);
-         mmImageProcessor_.setName("SplitView");
+         if (mmImageProcessor_ == null) {
+            mmImageProcessor_ = new SplitViewProcessor(this);
+            mmImageProcessor_.setName("SplitView");
+         }
          gui_.addImageProcessor(mmImageProcessor_);
          appliedToMDA_ = true;
       } else if (!applyToMDACheckBox_.isSelected() && appliedToMDA_) {

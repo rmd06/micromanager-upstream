@@ -80,7 +80,7 @@ if [ "$do_download" = yes ]; then
 fi
    cat >sha1sums <<EOF
 cef9a0cc7084b1d639e06cd3bc34e4251524c840  boost_1_55_0.tar.bz2
-9ab8e6c041b4ecc291b2dd1a3c93e9b342d5e0e4  6bb71fdd.patch
+8dfaf4d123f1161c83fff91d4ef70b8f95a4ef94  6bb71fdd.patch
 f206e7261d00503788ae8ec3a0635ced8a816293  e4bde20f.patch
 5f7bbf42a4d6e6b88d5e7666958c80f8455ee915  libusb-1.0.18.tar.bz2
 062319276d913c753a4b1341036e6a2e42abccc9  libusb-compat-0.1.5.tar.bz2
@@ -129,7 +129,7 @@ popd
 
 tar xjf ../downloads/libusb-1.0.18.tar.bz2
 pushd libusb-1.0.18
-eval ./configure $MM_CONFIGUREFLAGS --enable-static --disable-shared --with-pic
+eval ./configure $MM_DEPS_CONFIGUREFLAGS --enable-static --disable-shared --with-pic
 make $MM_PARALLELMAKEFLAG
 make install
 popd
@@ -142,7 +142,7 @@ popd
 
 tar xjf ../downloads/libusb-compat-0.1.5.tar.bz2
 pushd libusb-compat-0.1.5
-eval ./configure $MM_CONFIGUREFLAGS --enable-static --disable-shared --with-pic PKG_CONFIG_PATH=$MM_DEPS_PREFIX/lib/pkgconfig
+eval ./configure $MM_DEPS_CONFIGUREFLAGS --enable-static --disable-shared --with-pic PKG_CONFIG_PATH=$MM_DEPS_PREFIX/lib/pkgconfig
 make $MM_PARALLELMAKEFLAG
 make install
 popd
@@ -155,7 +155,7 @@ popd
 tar xzf ../downloads/hidapi-0.8.0-rc1.tar.gz
 pushd hidapi-hidapi-0.8.0-rc1
 ./bootstrap
-eval ./configure $MM_CONFIGUREFLAGS --enable-static --disable-shared --with-pic
+eval ./configure $MM_DEPS_CONFIGUREFLAGS --enable-static --disable-shared --with-pic
 make
 make install
 popd
@@ -168,7 +168,7 @@ popd
 
 tar xjf ../downloads/libexif-0.6.21.tar.bz2
 pushd libexif-0.6.21
-eval ./configure $MM_CONFIGUREFLAGS --enable-static --disable-shared --with-pic PKG_CONFIG_PATH=$MM_DEPS_PREFIX/lib/pkgconfig
+eval ./configure $MM_DEPS_CONFIGUREFLAGS --enable-static --disable-shared --with-pic PKG_CONFIG_PATH=$MM_DEPS_PREFIX/lib/pkgconfig
 make $MM_PARALLELMAKEFLAG
 make install
 popd
@@ -180,7 +180,7 @@ popd
 
 tar xzf ../downloads/libtool-2.4.2.tar.gz
 pushd libtool-2.4.2
-eval ./configure $MM_CONFIGUREFLAGS --enable-shared --disable-static --enable-ltdl-install
+eval ./configure $MM_DEPS_CONFIGUREFLAGS --enable-shared --disable-static --enable-ltdl-install
 make $MM_PARALLELMAKEFLAG
 make install
 popd
@@ -206,7 +206,7 @@ pushd libgphoto2-2.5.2
 # --without-libusb is key to prevent errors when both libusb-1.0 and libusb (0.1 or compat) are installed.
 
 
-eval ./configure $MM_CONFIGUREFLAGS_NOCPPLD "CPPFLAGS=\"\$MM_CPPFLAGS -isystem \$SDKROOT/usr/include/libxml2 -D_DARWIN_C_SOURCE\" LDFLAGS=\"\$MM_LDFLAGS\"" LTDLINCL=-I$MM_DEPS_PREFIX LIBLTDL=-lltdl PKG_CONFIG_PATH=$MM_DEPS_PREFIX/lib/pkgconfig --without-libusb "LIBUSB1_LIBS=\"-lusb-1.0 -framework IOKit -framework CoreFoundation\" LIBUSB1_CFLAGS=\"-I\$MM_DEPS_PREFIX/include/libusb-1.0\"" --enable-shared --disable-static
+eval ./configure $MM_DEPS_CONFIGUREFLAGS_NOCPPLD "CPPFLAGS=\"\$MM_CPPFLAGS -isystem \$SDKROOT/usr/include/libxml2 -D_DARWIN_C_SOURCE\" LDFLAGS=\"\$MM_LDFLAGS\"" LTDLINCL=-I$MM_DEPS_PREFIX LIBLTDL=-lltdl PKG_CONFIG_PATH=$MM_DEPS_PREFIX/lib/pkgconfig --without-libusb "LIBUSB1_LIBS=\"-lusb-1.0 -framework IOKit -framework CoreFoundation\" LIBUSB1_CFLAGS=\"-I\$MM_DEPS_PREFIX/include/libusb-1.0\"" --enable-shared --disable-static
 make $MM_PARALLELMAKEFLAG
 make install
 popd
@@ -374,7 +374,7 @@ patch -p2 <<'END_OF_PATCH'
         capture.c \
 END_OF_PATCH
 
-eval ./configure $MM_CONFIGUREFLAGS --disable-shared --enable-static --with-pic --disable-sdltest --disable-examples "LIBS=\"-framework IOKit\""
+eval ./configure $MM_DEPS_CONFIGUREFLAGS --disable-shared --enable-static --with-pic --disable-sdltest --disable-examples "LIBS=\"-framework IOKit\""
 make $MM_PARALLELMAKEFLAG
 make install
 popd
