@@ -43,7 +43,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.prefs.Preferences;
-import java.util.regex.Pattern;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -190,8 +189,7 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    private PropertyEditor propertyBrowser_;
    private CalibrationListDlg calibrationListDlg_;
    private AcqControlDlg acqControlWin_;
-   private ReportProblemDialog reportProblemDialog_;
-   
+
    private JMenu pluginMenu_;
    private Map<String, JMenu> pluginSubMenus_;
    private List<MMListenerInterface> MMListeners_
@@ -1269,16 +1267,11 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
 
        GUIUtils.addMenuItem(helpMenu, "Report Problem...", null,
                new Runnable() {
+                  @Override
                   public void run() {
-                     if (null == reportProblemDialog_) {
-                        reportProblemDialog_ = new ReportProblemDialog(core_, MMStudioMainFrame.this, options_);
-                        MMStudioMainFrame.this.addMMBackgroundListener(reportProblemDialog_);
-                        reportProblemDialog_.setBackground(guiColors_.background.get(options_.displayBackground_));
-                     }
-                     reportProblemDialog_.setVisible(true);
+                     org.micromanager.diagnostics.gui.ProblemReportController.start(core_, options_);
                   }
                });
-        
 
        GUIUtils.addMenuItem(helpMenu, "About Micromanager", null,
                new Runnable() {
@@ -2231,7 +2224,8 @@ public class MMStudioMainFrame extends JFrame implements ScriptInterface {
    
    private void checkPosListDlg() {
       if (posListDlg_ == null) {
-         posListDlg_ = new PositionListDlg(core_, this, posList_, options_);
+         posListDlg_ = new PositionListDlg(core_, this, posList_, 
+                 acqControlWin_,options_);
          GUIUtils.recallPosition(posListDlg_);
          posListDlg_.setBackground(gui_.getBackgroundColor());
          gui_.addMMBackgroundListener(posListDlg_);

@@ -4,7 +4,8 @@ AC_INIT([Micro-Manager], [1.4], [info@micro-manager.org])
 AC_CONFIG_MACRO_DIR([../m4])
 AC_CONFIG_SRCDIR([DemoCamera/DemoCamera.cpp])
 AC_CANONICAL_HOST
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign 1.11])
+LT_PREREQ([2.2.6])
 LT_INIT([disable-static])
 
 AC_PROG_CXX([clang++ llvm-g++ g++ c++])
@@ -33,6 +34,9 @@ AC_SUBST(MMDEVAPI_LDFLAGS)
 
 # Location of third party public files
 thirdpartypublic="${micromanager_path}/../3rdpartypublic"
+
+
+MM_INSTALL_DIRS
 
 
 # libusb 0.1 or libusb-compat
@@ -143,10 +147,22 @@ AM_CONDITIONAL([BUILD_IIDC], [test "x$use_libdc1394" = xyes])
 
 
 # Andor cameras on linux 
-AC_MSG_CHECKING(for Andor cameras)
-AM_CONDITIONAL([BUILD_ANDOR],[test -f "/usr/local/include/atmcdLXd.h"])
-if test -f "/usr/local/include/atmcdLXd.h" ; then
+AC_SEARCH_LIBS([SaveAsSif], [andor], [ANDORFOUND=yes], [ANDORFOUND=no])
+AM_CONDITIONAL([BUILD_ANDOR], [test "x$ANDORFOUND" = xyes])
+
+# Andor sCMOS cameras on Linux
+AC_MSG_CHECKING([for Andor sCMOS cameras])
+AM_CONDITIONAL([BUILD_ANDORSDK3], [test -f "/usr/local/include/atcore.h"])
+if test -f "/usr/local/include/atcore.h"; then
    AC_MSG_RESULT([found])
+   if test -z "$LIBATCORE"; then
+      case $host in
+         *-*-linux*)
+            LIBATCORE="-latcore"
+            LIBATUTILITY="-latutility"
+            ;;
+      esac
+   fi
 else
    AC_MSG_RESULT([not found])
 fi
@@ -344,6 +360,7 @@ m4_define([device_adapter_dirs], [m4_strip([
    Aladdin
    Andor
    AndorLaserCombiner
+   AndorSDK3
    Aquinas
    Arduino
    CARVII
