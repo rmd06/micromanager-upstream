@@ -18,12 +18,12 @@ import org.json.JSONArray;
 // ========================================
 // this is to run with ImageJ's BeanShellRunner.
 // Otherwise the 6 next lines are not needed.
-import org.micromanager.MMStudioMainFrame; 
-import mmcorej.CMMCore;
-import org.micromanager.acquisition.AcquisitionWrapperEngine;
-MMStudioMainFrame gui = MMStudioMainFrame.getInstance(); 
-CMMCore mmc = gui.getMMCore(); 
-AcquisitionWrapperEngine acq = gui.getAcquisitionEngine(); 
+//import org.micromanager.MMStudioMainFrame; 
+//import mmcorej.CMMCore;
+//import org.micromanager.acquisition.AcquisitionWrapperEngine;
+//MMStudioMainFrame gui = MMStudioMainFrame.getInstance(); 
+//CMMCore mmc = gui.getMMCore(); 
+//AcquisitionWrapperEngine acq = gui.getAcquisitionEngine(); 
 // ========================================
 
 //A nice big font to display the current Channel.
@@ -192,8 +192,8 @@ while(isRunning) {
 		prefixCurrent = newPrefix(prefixName,i);
 		gui.message("Acquiring " + prefixCurrent + ", " + channel.config + " channel ("+currentExposure+"ms).");
 		mmc.setExposure(currentExposure);
-		mmc.setConfig(channelGroup, channel.config);
-		mmc.waitForConfig(channelGroup, channel.config);
+		mmc.setConfig(mmc.getCurrentConfig(channelGroup), channel.config);
+		mmc.waitForConfig(mmc.getCurrentConfig(channelGroup), channel.config);
 		mmc.snapImage();
 
 		//Create a tagged image and add the necessary tags
