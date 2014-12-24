@@ -1,9 +1,10 @@
 // Script for manual acquisition
 // based on manualAcq.bsh, Nenad Amodaj, Feb 2008, Nico Stuurman, April 2008
-// Egor Zindy, Feb 2014
+// Egor Zindy, Dec 2014
 
 import mmcorej.TaggedImage;
 import org.micromanager.api.SequenceSettings;
+import org.micromanager.api.ImageCache;
 import org.micromanager.api.MMTags;
 import org.micromanager.utils.ChannelSpec;
 import org.micromanager.utils.ImageUtils;
@@ -15,21 +16,10 @@ import ij.gui.WaitForUserDialog;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
-// ========================================
-// this is to run with ImageJ's BeanShellRunner.
-// Otherwise the 6 next lines are not needed.
-//import org.micromanager.MMStudioMainFrame; 
-//import mmcorej.CMMCore;
-//import org.micromanager.acquisition.AcquisitionWrapperEngine;
-//MMStudioMainFrame gui = MMStudioMainFrame.getInstance(); 
-//CMMCore mmc = gui.getMMCore(); 
-//AcquisitionWrapperEngine acq = gui.getAcquisitionEngine(); 
-// ========================================
-
 //A nice big font to display the current Channel.
 Font font = new Font("SansSerif", Font.BOLD, 24);
 
-//a method to create a new directory name.
+//a method for creating a new directory name.
 String[] newDirectory(String rootDirName, String prefixName) {
 	File f = new File(rootDirName, prefixName);
 	String name = prefixName;
@@ -45,7 +35,7 @@ String[] newDirectory(String rootDirName, String prefixName) {
 	return ret;
 }
 
-//a method to create a new prefix
+//a method for creating a new prefix underscore number from prefix + number
 String newPrefix(String prefixName, int increment) {
 	Long[] iArray = new Long[] {increment};
 	String name = prefixName + "_" + String.format("%04d", iArray);
@@ -67,7 +57,6 @@ gui.clearMessageWindow();
 // parameters
 numFrames = 1;
 numSlices = 1;
-channelGroup = "Channel";
 numChannels = 0;
 
 //number of active channels
@@ -117,6 +106,7 @@ while(isRunning) {
 	prefixCurrent = newPrefix(prefixName,i);
 	File f;
 
+	String channelGroup = (String)mmc.getChannelGroup();
 	//channel loop
 	while (j<numChannels) {
 		ChannelSpec channel = channelList.get(j);
@@ -192,8 +182,8 @@ while(isRunning) {
 		prefixCurrent = newPrefix(prefixName,i);
 		gui.message("Acquiring " + prefixCurrent + ", " + channel.config + " channel ("+currentExposure+"ms).");
 		mmc.setExposure(currentExposure);
-		mmc.setConfig(mmc.getCurrentConfig(channelGroup), channel.config);
-		mmc.waitForConfig(mmc.getCurrentConfig(channelGroup), channel.config);
+		mmc.setConfig(channelGroup, channel.config);
+		mmc.waitForConfig(channelGroup, channel.config);
 		mmc.snapImage();
 
 		//Create a tagged image and add the necessary tags
@@ -208,7 +198,7 @@ while(isRunning) {
 
 		//check that we have an acquisition window. If not, create it.
 		if (!gui.acquisitionExists(acqName)) {
-			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices, true, false);
+			gui.openAcquisition(acqName, rootDirName, numFrames, numChannels, numSlices, true);
 			try {
 				//need to check the syntax on this one... string + 3 ints or string + 4 ints?
 				gui.initializeAcquisition(acqName, (int)mmc.getImageWidth(), (int)mmc.getImageHeight(), (int)mmc.getBytesPerPixel(), 0);
@@ -222,7 +212,9 @@ while(isRunning) {
 				gui.setChannelName(acqName, k, channel.config);
 			}
 		}
-		gui.addImage(acqName, img);
+
+		//Add the image to the acquisition window
+		gui.addImage(acqName, img, true, true);
 
 		//Empty list to begin with, need to be careful here.
 		int imgListSize = imgList.size();
@@ -258,6 +250,7 @@ while(isRunning) {
 
 	//saving the image
 	mmAcq = gui.getAcquisition(acqName);
+	ImageCache cache = mmAcq.getImageCache();
 
 	//Building a summary for the image stack
 	JSONArray chMins = new JSONArray();
@@ -290,17 +283,18 @@ while(isRunning) {
 	TaggedImageStorageMultipageTiff storage = new TaggedImageStorageMultipageTiff(fullDirName,true,summary); 
 	for (j=0;j<numChannels;j++) {
 		TaggedImage img = imgList.get(j);
-		//min and max of the image using an imageprocessor
-		ImageProcessor ip = ImageUtils.makeProcessor(img);
-		ip.resetMinAndMax();
-		chMins.put(ip.minValue());
-		chMaxs.put(ip.maxValue());
-
+		//min and max contrast value for each channel (taken from the mmAcq)
+		int min = cache.getChannelMin(j);
+		int max = cache.getChannelMax(j);
+		chMins.put(min);
+		chMaxs.put(max);
 		storage.putImage(img);
 	}
 
 	summary.put(MMTags.Summary.CHANNEL_MINS, chMins);
 	summary.put(MMTags.Summary.CHANNEL_MAXES, chMaxs);
+	summary.put("ChContrastMin", chMins);
+	summary.put("ChContrastMax", chMaxs);
 
 	storage.finished();
 	storage.close();
